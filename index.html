@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoot-on-Move Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f2f4f7;
+        --panel: #ffffff;
+        --ink: #1b1f24;
+        --muted: #5f6c7b;
+        --accent: #ee6c4d;
+        --goal: #3d5a80;
+        --velocity: #2a9d8f;
+        --outline: rgba(27, 31, 36, 0.1);
+        --shadow: rgba(20, 26, 36, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        overflow: hidden;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        height: 100vh;
+      }
+
+      #canvas-container {
+        position: relative;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        outline: none;
+      }
+
+      #canvas-container canvas {
+        display: block;
+      }
+
+      .hud {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: #fff;
+        font-size: 12px;
+        background: rgba(0,0,0,0.6);
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-family: "IBM Plex Mono", monospace;
+        pointer-events: none;
+      }
+
+      .hud h3 {
+        margin: 0 0 8px;
+        font-family: "Fraunces", serif;
+        font-size: 18px;
+      }
+
+      .hud .keys {
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255,255,255,0.2);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      .hud kbd {
+        background: rgba(255,255,255,0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: inherit;
+      }
+
+      .controls-panel {
+        background: var(--panel);
+        padding: 20px;
+        overflow-y: auto;
+        border-left: 1px solid var(--outline);
+      }
+
+      .controls-panel h2 {
+        font-family: "Fraunces", serif;
+        font-size: 24px;
+        margin: 0 0 16px;
+      }
+
+      .control-group {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid var(--outline);
+        background: #fbfcfe;
+        margin-bottom: 12px;
+      }
+
+      .control-group label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+
+      .control-row {
+        display: grid;
+        grid-template-columns: 1fr 70px;
+        gap: 8px;
+        align-items: center;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      input[type="number"] {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid rgba(27, 31, 36, 0.2);
+        padding: 4px 6px;
+        font-size: 12px;
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .metric {
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid var(--outline);
+        background: #fff;
+      }
+
+      .metric .label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .metric .value {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+      }
+
+      .metric .value.ok { color: #2a9d8f; }
+      .metric .value.warn { color: #c1121f; }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .helper {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .camera-hint {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: rgba(255,255,255,0.6);
+        font-size: 11px;
+        pointer-events: none;
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: 60vh 1fr;
+        }
+        .controls-panel {
+          border-left: none;
+          border-top: 1px solid var(--outline);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div id="canvas-container" tabindex="0">
+        <div class="hud">
+          <h3>动态射球可视化</h3>
+          <div class="keys">
+            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 <kbd>Space</kbd> 停
+          </div>
+          <div style="margin-top: 8px; font-size: 10px; line-height: 1.5;">
+            <span style="color: #ee6c4d;">─</span> 瞄准
+            <span style="color: #ffb703;">●</span> 虚拟目标
+            <span style="color: #2a9d8f;">●</span> 落点<br>
+            <span style="color: #ee6c4d;">⌒</span> 弹道
+            <span style="color: #2a9d8f;">→</span> 速度
+          </div>
+        </div>
+        <div class="camera-hint">拖拽旋转 · 滚轮缩放 · 点击启用键盘</div>
+      </div>
+
+      <aside class="controls-panel">
+        <h2>控制</h2>
+
+        <div class="control-group">
+          <label>位置 X/Y (m)</label>
+          <div class="control-row" data-key="robotX">
+            <input type="range" min="0" max="16.54" step="0.01" value="2.0" />
+            <input type="number" step="0.01" value="2.0" />
+          </div>
+          <div class="control-row" data-key="robotY">
+            <input type="range" min="0" max="8.07" step="0.01" value="4.035" />
+            <input type="number" step="0.01" value="4.035" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>最大速度 (m/s)</label>
+          <div class="control-row" data-key="maxLinearSpeed">
+            <input type="range" min="0.5" max="6.86" step="0.1" value="2.0" />
+            <input type="number" step="0.1" value="2.0" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>最大加速度 (m/s²)</label>
+          <div class="control-row" data-key="maxAcceleration">
+            <input type="range" min="0.5" max="6.87" step="0.1" value="3.0" />
+            <input type="number" step="0.1" value="3.0" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="toggle">
+            <input type="checkbox" id="shootOnMove" checked />
+            动态补偿
+          </label>
+        </div>
+
+        <div class="control-group" style="border-top: 1px solid rgba(255,255,255,0.2); padding-top: 12px; margin-top: 8px;">
+          <label style="font-weight: bold; color: #f4a261;">⚙️ 机构参数</label>
+
+          <label>发射高度 (m)</label>
+          <div class="control-row" data-key="launcherHeight">
+            <input type="range" min="0.2" max="1.0" step="0.05" value="0.5" />
+            <input type="number" step="0.05" value="0.5" />
+          </div>
+
+          <label>Hood 最小角 (°)</label>
+          <div class="control-row" data-key="minHoodAngle">
+            <input type="range" min="20" max="80" step="1" value="45" />
+            <input type="number" step="1" value="45" />
+          </div>
+
+          <label>Hood 最大角 (°)</label>
+          <div class="control-row" data-key="maxHoodAngle">
+            <input type="range" min="50" max="90" step="1" value="90" />
+            <input type="number" step="1" value="90" />
+          </div>
+
+          <label>最小入射角 (°)</label>
+          <div class="control-row" data-key="minEntryAngle">
+            <input type="range" min="15" max="60" step="5" value="30" />
+            <input type="number" step="5" value="30" />
+          </div>
+
+          <label>飞轮最高速 (m/s)</label>
+          <div class="control-row" data-key="maxFlywheelSpeed">
+            <input type="range" min="10" max="45" step="1" value="25" />
+            <input type="number" step="1" value="25" />
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="label">距离</div>
+            <div class="value" id="metricRange">0.00</div>
+          </div>
+          <div class="metric">
+            <div class="label">飞轮</div>
+            <div class="value" id="metricFlywheel">0.0</div>
+          </div>
+          <div class="metric">
+            <div class="label">Hood</div>
+            <div class="value" id="metricHood">0.0</div>
+          </div>
+          <div class="metric">
+            <div class="label">入射角</div>
+            <div class="value" id="metricEntry">0.0</div>
+          </div>
+          <div class="metric">
+            <div class="label">命中</div>
+            <div class="value" id="metricOnTarget">否</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+
+    <script type="module">
+      import * as THREE from 'three';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+      // ===== 常量定义 =====
+      const FIELD_LENGTH = 16.54;
+      const FIELD_WIDTH = 8.07;
+      const GRAVITY = 9.81;
+
+      const HUB_X = 4.03;
+      const HUB_Y = 4.035;
+      const HUB_HEIGHT = 1.83;
+      const HUB_BASE_SIZE = 1.19;
+      const HUB_OPENING_SIZE = 1.06;
+
+      // ===== 状态变量 =====
+      const state = {
+        // 机器人位置和运动
+        robotX: 2.0,
+        robotY: 4.035,
+        robotVx: 0,
+        robotVy: 0,
+        chassisHeading: 0,
+        maxLinearSpeed: 2.0,
+        maxAcceleration: 3.0,
+        shootOnMove: true,
+        // 机械参数 (可在 UI 调整)
+        launcherHeight: 0.5,    // 发射高度 (m)
+        minHoodAngle: 45,       // Hood 最小角度 (deg)
+        maxHoodAngle: 90,       // Hood 最大角度 (deg)
+        minEntryAngle: 30,      // 最小下落角度 (deg)
+        maxFlywheelSpeed: 25,   // 飞轮最高速度 (m/s)
+      };
+
+      const keys = { w: false, a: false, s: false, d: false };
+
+      // ===== DOM 引用 =====
+      const metrics = {
+        range: document.getElementById("metricRange"),
+        flywheel: document.getElementById("metricFlywheel"),
+        hood: document.getElementById("metricHood"),
+        entry: document.getElementById("metricEntry"),
+        onTarget: document.getElementById("metricOnTarget"),
+      };
+
+      // ===== 物理计算函数 =====
+
+      // HUB 底座半宽 (球在水平到达这个位置时必须已高于 HUB 顶部)
+      const HUB_HALF_WIDTH = 0.6;
+
+      /**
+       * 在约束范围内找到最优 Hood 角度
+       * 约束: 边缘高度>HUB, 下降阶段, 入射角够陡, 飞轮速度≤最大值
+       */
+      function findOptimalHoodAngle(range, deltaH) {
+        const STEP = 0.5 * Math.PI / 180;
+
+        // 从 state 读取可调参数
+        const launcherHeight = state.launcherHeight;
+        const minHoodAngle = state.minHoodAngle * Math.PI / 180;
+        const maxHoodAngle = state.maxHoodAngle * Math.PI / 180;
+        const minEntryAngle = state.minEntryAngle * Math.PI / 180;
+        const maxFlywheelSpeed = state.maxFlywheelSpeed;
+
+        const distToHubEdge = Math.max(range - HUB_HALF_WIDTH, 0.1);
+
+        let bestAngle = minHoodAngle;
+        let minSpeed = Infinity;
+        let foundValid = false;
+        let bestEntryAngle = 0;
+        let bestHeightAtEdge = 0;
+
+        // 备选方案
+        let fallbackAngle = minHoodAngle;
+        let fallbackSpeed = Infinity;
+        let fallbackEntryAngle = 0;
+        let fallbackHeightAtEdge = 0;
+        let fallbackLevel = 0;
+
+        for (let angle = minHoodAngle; angle <= maxHoodAngle; angle += STEP) {
+          const tanA = Math.tan(angle);
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+          const denom = range * tanA - deltaH;
+
+          if (denom <= 0) continue;
+
+          const speedSq = (GRAVITY * range * range) / (2 * cosA * cosA * denom);
+          const speed = Math.sqrt(speedSq);
+
+          // 飞轮速度约束
+          if (speed > maxFlywheelSpeed) continue;
+
+          const vz0 = speed * sinA;
+          const vHorizontal = speed * cosA;
+
+          // 【关键约束】球到达 HUB 边缘时的高度
+          // t_edge = distToHubEdge / vHorizontal
+          // z(t_edge) = launcherHeight + vz0 * t_edge - 0.5 * g * t_edge²
+          let heightAtEdge = Infinity;
+          let clearsHub = true;
+
+          if (vHorizontal > 0.01) {
+            const t_edge = distToHubEdge / vHorizontal;
+            heightAtEdge = launcherHeight + vz0 * t_edge - 0.5 * GRAVITY * t_edge * t_edge;
+            clearsHub = heightAtEdge > HUB_HEIGHT;
+          }
+
+          if (!clearsHub) {
+            // 球在到达 HUB 边缘时还没升到足够高，会撞侧面
+            if (fallbackLevel < 1 || (fallbackLevel === 1 && speed < fallbackSpeed)) {
+              fallbackLevel = 1;
+              fallbackSpeed = speed;
+              fallbackAngle = angle;
+              fallbackHeightAtEdge = heightAtEdge;
+              fallbackEntryAngle = 0;
+            }
+            continue;
+          }
+
+          const T = range / vHorizontal;
+          const vz_at_target = vz0 - GRAVITY * T;
+          const isDescending = vz_at_target < 0;
+
+          if (!isDescending) {
+            if (fallbackLevel < 2 || (fallbackLevel === 2 && speed < fallbackSpeed)) {
+              fallbackLevel = 2;
+              fallbackSpeed = speed;
+              fallbackAngle = angle;
+              fallbackHeightAtEdge = heightAtEdge;
+              fallbackEntryAngle = 0;
+            }
+            continue;
+          }
+
+          const entryAngleRad = Math.atan2(-vz_at_target, vHorizontal);
+          const entryAngleDeg = entryAngleRad * 180 / Math.PI;
+          const isSteepEnough = entryAngleRad >= minEntryAngle;
+
+          if (!isSteepEnough) {
+            if (fallbackLevel < 3 || (fallbackLevel === 3 && speed < fallbackSpeed)) {
+              fallbackLevel = 3;
+              fallbackSpeed = speed;
+              fallbackAngle = angle;
+              fallbackHeightAtEdge = heightAtEdge;
+              fallbackEntryAngle = entryAngleDeg;
+            }
+            continue;
+          }
+
+          if (!foundValid || speed < minSpeed) {
+            foundValid = true;
+            minSpeed = speed;
+            bestAngle = angle;
+            bestEntryAngle = entryAngleDeg;
+            bestHeightAtEdge = heightAtEdge;
+          }
+        }
+
+        if (foundValid) {
+          return {
+            angle: bestAngle,
+            speed: minSpeed,
+            heightAtEdge: bestHeightAtEdge,
+            clearsHub: true,
+            isDescending: true,
+            isSteepEnough: true,
+            entryAngleDeg: bestEntryAngle
+          };
+        }
+
+        return {
+          angle: fallbackAngle,
+          speed: fallbackSpeed,
+          heightAtEdge: fallbackHeightAtEdge,
+          clearsHub: fallbackLevel >= 2,
+          isDescending: fallbackLevel >= 3,
+          isSteepEnough: false,
+          entryAngleDeg: fallbackEntryAngle
+        };
+      }
+
+      /**
+       * 生成 HUB 六边形顶点
+       */
+      function getHubHexPoints() {
+        const apothem = HUB_OPENING_SIZE / 2;
+        const radius = apothem / Math.cos(Math.PI / 6);
+        const points = [];
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI) / 3 - Math.PI / 6;
+          points.push({
+            x: HUB_X + radius * Math.cos(angle),
+            y: HUB_Y + radius * Math.sin(angle),
+          });
+        }
+        return points;
+      }
+
+      /**
+       * 检查点是否在多边形内
+       */
+      function pointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x, yi = polygon[i].y;
+          const xj = polygon[j].x, yj = polygon[j].y;
+          const intersect = yi > point.y !== yj > point.y &&
+            point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      const hubHexPoints = getHubHexPoints();
+
+      /**
+       * 核心计算函数：计算射球解决方案
+       */
+      function computeShootingSolution() {
+        const { robotX, robotY, robotVx, robotVy, shootOnMove } = state;
+
+        // Step 1: 基础几何
+        const dx = HUB_X - robotX;
+        const dy = HUB_Y - robotY;
+        const range = Math.hypot(dx, dy);
+        const goalAngle = Math.atan2(dy, dx);
+        const deltaH = HUB_HEIGHT - state.launcherHeight;
+
+        // Step 2: 分解机器人速度为径向/切向 (借鉴 Team 254)
+        const cosG = Math.cos(goalAngle);
+        const sinG = Math.sin(goalAngle);
+        const radialV = robotVx * cosG + robotVy * sinG;      // 朝向目标
+        const tangentialV = -robotVx * sinG + robotVy * cosG; // 垂直于目标方向
+
+        // Step 3: 迭代求解
+        let timeOfFlight = 0.5;
+        let effectiveRange = range;
+        let effectiveShotSpeed = range / timeOfFlight;
+        let hoodAngle = 60 * Math.PI / 180;
+        let flywheelSpeed = 10;
+        let isValid = false;
+        let clearsHub = false;      // 球是否能越过 HUB 边缘
+        let heightAtEdge = 0;       // 球到达 HUB 边缘时的高度
+        let isDescending = false;   // 球是否在下降阶段
+        let isSteepEnough = false;  // 下落角度是否足够陡
+        let entryAngleDeg = 0;      // 下落角度（度）
+
+        for (let iter = 0; iter < 3; iter++) {
+          // 3.1: 计算有效射程 (如果启用 shoot-on-move)
+          if (shootOnMove && timeOfFlight > 0) {
+            effectiveShotSpeed = range / timeOfFlight - radialV;
+            if (effectiveShotSpeed < 0.1) effectiveShotSpeed = 0.1;
+            effectiveRange = timeOfFlight * Math.hypot(tangentialV, effectiveShotSpeed);
+          } else {
+            effectiveShotSpeed = range / timeOfFlight;
+            effectiveRange = range;
+          }
+
+          // 3.2: 找到最优 Hood 角度（带边缘高度+下降+角度约束）
+          const hoodResult = findOptimalHoodAngle(effectiveRange, deltaH);
+          hoodAngle = hoodResult.angle;
+          clearsHub = hoodResult.clearsHub;
+          heightAtEdge = hoodResult.heightAtEdge;
+          isDescending = hoodResult.isDescending;
+          isSteepEnough = hoodResult.isSteepEnough;
+          entryAngleDeg = hoodResult.entryAngleDeg;
+
+          // 3.3: 计算 flywheelSpeed 和 timeOfFlight
+          const tanH = Math.tan(hoodAngle);
+          const cosH = Math.cos(hoodAngle);
+          const denom = effectiveRange * tanH - deltaH;
+
+          if (denom <= 0) {
+            isValid = false;
+            break;
+          }
+
+          const speedSq = (GRAVITY * effectiveRange * effectiveRange) / (2 * cosH * cosH * denom);
+          flywheelSpeed = Math.sqrt(speedSq);
+
+          // 水平速度分量
+          const vHorizontal = flywheelSpeed * cosH;
+          if (vHorizontal > 0.1) {
+            timeOfFlight = effectiveRange / vHorizontal;
+            isValid = true;
+          } else {
+            isValid = false;
+            break;
+          }
+        }
+
+        // Step 4: 计算 Yaw 补偿
+        let yawCompensation = 0;
+        if (shootOnMove && effectiveShotSpeed > 0.1) {
+          yawCompensation = Math.atan2(-tangentialV, effectiveShotSpeed);
+        }
+        const chassisHeading = goalAngle + yawCompensation;
+
+        // Step 5: 计算虚拟目标位置 (用于可视化)
+        const virtualTarget = {
+          x: HUB_X - robotVx * timeOfFlight * (shootOnMove ? 1 : 0),
+          y: HUB_Y - robotVy * timeOfFlight * (shootOnMove ? 1 : 0),
+        };
+
+        // Step 6: 计算实际落点
+        // 球的初速度 (地面系) = flywheel 方向速度 + 机器人速度
+        const vz = flywheelSpeed * Math.sin(hoodAngle);
+        const vHorizontal = flywheelSpeed * Math.cos(hoodAngle);
+
+        // flywheel 方向是 chassisHeading
+        const flywheelVx = vHorizontal * Math.cos(chassisHeading);
+        const flywheelVy = vHorizontal * Math.sin(chassisHeading);
+
+        // 球的地面速度
+        const ballVx = flywheelVx + robotVx;
+        const ballVy = flywheelVy + robotVy;
+
+        // 计算落到 HUB 高度的时间
+        // z(t) = LAUNCHER_HEIGHT + vz*t - 0.5*g*t² = HUB_HEIGHT
+        // 0.5*g*t² - vz*t + (HUB_HEIGHT - LAUNCHER_HEIGHT) = 0
+        const a = 0.5 * GRAVITY;
+        const b = -vz;
+        const c = deltaH;
+        const discriminant = b * b - 4 * a * c;
+
+        let impactPoint = { x: HUB_X, y: HUB_Y };
+        let actualToF = timeOfFlight;
+
+        if (isValid && discriminant >= 0) {
+          const sqrtD = Math.sqrt(discriminant);
+          const t1 = (-b - sqrtD) / (2 * a);
+          const t2 = (-b + sqrtD) / (2 * a);
+          actualToF = t2 > 0 ? t2 : t1; // 取下降阶段的解
+
+          if (actualToF > 0) {
+            impactPoint = {
+              x: robotX + ballVx * actualToF,
+              y: robotY + ballVy * actualToF,
+            };
+          }
+        } else {
+          isValid = false;
+        }
+
+        // 最终判定：必须有效 + 顶点够高 + 下降 + 角度够陡 + 落入目标区域
+        const inTarget = pointInPolygon(impactPoint, hubHexPoints);
+        const isOnTarget = isValid && clearsHub && isDescending && isSteepEnough && inTarget;
+
+        return {
+          chassisHeading,
+          flywheelSpeed,
+          hoodAngle,
+          hoodAngleDeg: hoodAngle * 180 / Math.PI,
+          range,
+          effectiveRange,
+          timeOfFlight: actualToF,
+          yawCompensation,
+          yawCompensationDeg: yawCompensation * 180 / Math.PI,
+          virtualTarget,
+          impactPoint,
+          isValid,
+          clearsHub,       // 球是否能越过 HUB 边缘
+          heightAtEdge,    // 球到达 HUB 边缘时的高度 (m)
+          isDescending,    // 球是否在下降阶段
+          isSteepEnough,   // 下落角度是否足够陡
+          entryAngleDeg,   // 下落角度（度）
+          inTarget,        // 落点是否在 HUB 开口内
+          isOnTarget,      // 综合判定
+          goalAngle,
+          // 轨迹绘制用
+          ballVx, ballVy, vz,
+        };
+      }
+
+      // ===== Three.js 场景设置 =====
+      const container = document.getElementById('canvas-container');
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x16213e);
+
+      const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+      camera.position.set(-1, 6, 4.035);
+      camera.lookAt(HUB_X, 1.5, HUB_Y);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      const orbitControls = new OrbitControls(camera, renderer.domElement);
+      orbitControls.target.set(HUB_X, 1, HUB_Y);
+      orbitControls.enableDamping = true;
+      orbitControls.dampingFactor = 0.05;
+      orbitControls.update();
+
+      // 光照
+      scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+      dirLight.position.set(10, 20, 10);
+      dirLight.castShadow = true;
+      scene.add(dirLight);
+
+      // 场地地面
+      const fieldGeo = new THREE.PlaneGeometry(FIELD_LENGTH, FIELD_WIDTH);
+      const fieldMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.8 });
+      const fieldMesh = new THREE.Mesh(fieldGeo, fieldMat);
+      fieldMesh.rotation.x = -Math.PI / 2;
+      fieldMesh.position.set(FIELD_LENGTH / 2, 0, FIELD_WIDTH / 2);
+      fieldMesh.receiveShadow = true;
+      scene.add(fieldMesh);
+
+      // Alliance Zone
+      const azGeo = new THREE.PlaneGeometry(4.03, FIELD_WIDTH);
+      const azMat = new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.15 });
+      const azMesh = new THREE.Mesh(azGeo, azMat);
+      azMesh.rotation.x = -Math.PI / 2;
+      azMesh.position.set(4.03 / 2, 0.01, FIELD_WIDTH / 2);
+      scene.add(azMesh);
+
+      // 网格
+      const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
+      gridHelper.position.set(FIELD_LENGTH / 2, 0.02, FIELD_WIDTH / 2);
+      scene.add(gridHelper);
+
+      // HUB 底座
+      const hubBaseGeo = new THREE.BoxGeometry(HUB_BASE_SIZE, 1.0, HUB_BASE_SIZE);
+      const hubBaseMat = new THREE.MeshStandardMaterial({ color: 0x3d5a80, transparent: true, opacity: 0.6 });
+      const hubBaseMesh = new THREE.Mesh(hubBaseGeo, hubBaseMat);
+      hubBaseMesh.position.set(HUB_X, 0.5, HUB_Y);
+      hubBaseMesh.castShadow = true;
+      scene.add(hubBaseMesh);
+
+      // HUB 六边形开口
+      const hexShape = new THREE.Shape();
+      const hexRadius = (HUB_OPENING_SIZE / 2) / Math.cos(Math.PI / 6);
+      for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI) / 3 - Math.PI / 6;
+        const x = hexRadius * Math.cos(angle);
+        const y = hexRadius * Math.sin(angle);
+        if (i === 0) hexShape.moveTo(x, y);
+        else hexShape.lineTo(x, y);
+      }
+      hexShape.closePath();
+      const hexGeo = new THREE.ShapeGeometry(hexShape);
+      const hexMat = new THREE.MeshBasicMaterial({ color: 0x2a9d8f, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+      const hexMesh = new THREE.Mesh(hexGeo, hexMat);
+      hexMesh.rotation.x = -Math.PI / 2;
+      hexMesh.position.set(HUB_X, HUB_HEIGHT, HUB_Y);
+      scene.add(hexMesh);
+
+      // HUB 开口边框
+      const hexEdgeGeo = new THREE.EdgesGeometry(hexGeo);
+      const hexEdgeMat = new THREE.LineBasicMaterial({ color: 0x2a9d8f, linewidth: 2 });
+      const hexEdgeLine = new THREE.LineSegments(hexEdgeGeo, hexEdgeMat);
+      hexEdgeLine.rotation.x = -Math.PI / 2;
+      hexEdgeLine.position.set(HUB_X, HUB_HEIGHT, HUB_Y);
+      scene.add(hexEdgeLine);
+
+      // HUB 柱体
+      const pillarGeo = new THREE.CylinderGeometry(0.05, 0.05, HUB_HEIGHT - 1.0, 8);
+      const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3d5a80 });
+      [[HUB_BASE_SIZE/2, HUB_BASE_SIZE/2], [-HUB_BASE_SIZE/2, HUB_BASE_SIZE/2],
+       [-HUB_BASE_SIZE/2, -HUB_BASE_SIZE/2], [HUB_BASE_SIZE/2, -HUB_BASE_SIZE/2]].forEach(([px, pz]) => {
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        pillar.position.set(HUB_X + px, 1.0 + (HUB_HEIGHT - 1.0) / 2, HUB_Y + pz);
+        scene.add(pillar);
+      });
+
+      // 机器人
+      const robotGroup = new THREE.Group();
+      const robotGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
+      const robotMat = new THREE.MeshStandardMaterial({ color: 0x1b1f24 });
+      const robotMesh = new THREE.Mesh(robotGeo, robotMat);
+      robotMesh.castShadow = true;
+      robotGroup.add(robotMesh);
+
+      // 方向箭头
+      const arrowShape = new THREE.Shape();
+      arrowShape.moveTo(0.25, 0);
+      arrowShape.lineTo(-0.1, -0.12);
+      arrowShape.lineTo(-0.1, 0.12);
+      arrowShape.closePath();
+      const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+      const arrowMat = new THREE.MeshBasicMaterial({ color: 0xee6c4d, side: THREE.DoubleSide });
+      const directionArrow = new THREE.Mesh(arrowGeo, arrowMat);
+      directionArrow.rotation.x = -Math.PI / 2;
+      directionArrow.position.y = 0.16;
+      robotGroup.add(directionArrow);
+      scene.add(robotGroup);
+
+      // 速度箭头
+      const velocityArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1, 0x2a9d8f, 0.15, 0.1
+      );
+      scene.add(velocityArrow);
+
+      // 静止参考线
+      const refLineMat = new THREE.LineDashedMaterial({ color: 0x666666, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.5 });
+      const refLineGeo = new THREE.BufferGeometry();
+      const refLine = new THREE.Line(refLineGeo, refLineMat);
+      scene.add(refLine);
+
+      // 瞄准线
+      const aimLineMat = new THREE.LineBasicMaterial({ color: 0xee6c4d, transparent: true, opacity: 0.8 });
+      const aimLineGeo = new THREE.BufferGeometry();
+      const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
+      scene.add(aimLine);
+
+      // 虚拟目标
+      const vtGeo = new THREE.RingGeometry(0.08, 0.12, 32);
+      const vtMat = new THREE.MeshBasicMaterial({ color: 0xffb703, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+      const vtMesh = new THREE.Mesh(vtGeo, vtMat);
+      vtMesh.rotation.x = -Math.PI / 2;
+      scene.add(vtMesh);
+
+      // 虚拟目标垂直线
+      const vtLineMat = new THREE.LineDashedMaterial({ color: 0xffb703, dashSize: 0.1, gapSize: 0.05, transparent: true, opacity: 0.5 });
+      const vtLineGeo = new THREE.BufferGeometry();
+      const vtLine = new THREE.Line(vtLineGeo, vtLineMat);
+      scene.add(vtLine);
+
+      // 落点
+      const impactGeo = new THREE.SphereGeometry(0.1, 16, 16);
+      const impactMat = new THREE.MeshBasicMaterial({ color: 0x2a9d8f, transparent: true, opacity: 0.9 });
+      const impactMesh = new THREE.Mesh(impactGeo, impactMat);
+      scene.add(impactMesh);
+
+      // 弹道轨迹
+      let trajectoryLine = null;
+
+      function updateTrajectory(solution) {
+        if (trajectoryLine) {
+          scene.remove(trajectoryLine);
+          trajectoryLine.geometry.dispose();
+          trajectoryLine = null;
+        }
+
+        if (!solution.isValid) return;
+
+        const points = [];
+        const steps = 60;
+        const { ballVx, ballVy, vz, timeOfFlight } = solution;
+
+        for (let i = 0; i <= steps; i++) {
+          const t = (i / steps) * timeOfFlight * 1.1;
+          const x = state.robotX + ballVx * t;
+          const y = state.robotY + ballVy * t;
+          const z = state.launcherHeight + vz * t - 0.5 * GRAVITY * t * t;
+          if (z < 0) break;
+          points.push(new THREE.Vector3(x, z, y));
+        }
+
+        if (points.length < 2) return;
+
+        const trajGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const trajMat = new THREE.LineBasicMaterial({ color: 0xee6c4d, transparent: true, opacity: 0.8 });
+        trajectoryLine = new THREE.Line(trajGeo, trajMat);
+        scene.add(trajectoryLine);
+      }
+
+      // ===== 场景更新函数 =====
+      function updateScene(solution) {
+        // 更新指标
+        metrics.range.textContent = solution.range.toFixed(2);
+        metrics.flywheel.textContent = solution.isValid ? solution.flywheelSpeed.toFixed(1) : "---";
+        metrics.hood.textContent = solution.isValid ? solution.hoodAngleDeg.toFixed(1) : "---";
+        metrics.entry.textContent = solution.isValid && solution.isDescending ? solution.entryAngleDeg.toFixed(1) : "---";
+
+        const isOk = solution.isOnTarget;
+        metrics.onTarget.textContent = isOk ? "是" : "否";
+        metrics.onTarget.classList.toggle("ok", isOk);
+        metrics.onTarget.classList.toggle("warn", !isOk);
+
+        // 更新 HUB 颜色
+        hexMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
+        hexEdgeMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
+
+        // 机器人位置和朝向
+        robotGroup.position.set(state.robotX, 0.15, state.robotY);
+        robotGroup.rotation.y = -state.chassisHeading;
+
+        // 速度箭头
+        const speed = Math.hypot(state.robotVx, state.robotVy);
+        if (speed > 0.01) {
+          velocityArrow.visible = true;
+          velocityArrow.position.set(state.robotX, 0.3, state.robotY);
+          velocityArrow.setDirection(new THREE.Vector3(state.robotVx, 0, state.robotVy).normalize());
+          velocityArrow.setLength(Math.min(speed * 2, 3), 0.15, 0.1);
+        } else {
+          velocityArrow.visible = false;
+        }
+
+        // 静止参考线
+        refLineGeo.setFromPoints([
+          new THREE.Vector3(state.robotX, state.launcherHeight, state.robotY),
+          new THREE.Vector3(HUB_X, HUB_HEIGHT, HUB_Y),
+        ]);
+        refLine.computeLineDistances();
+
+        // 瞄准线
+        const aimLength = Math.max(solution.range * 1.2, 5);
+        aimLineGeo.setFromPoints([
+          new THREE.Vector3(state.robotX, state.launcherHeight, state.robotY),
+          new THREE.Vector3(
+            state.robotX + Math.cos(solution.chassisHeading) * aimLength,
+            HUB_HEIGHT,
+            state.robotY + Math.sin(solution.chassisHeading) * aimLength
+          ),
+        ]);
+
+        // 虚拟目标
+        vtMesh.position.set(solution.virtualTarget.x, 0.02, solution.virtualTarget.y);
+        vtLineGeo.setFromPoints([
+          new THREE.Vector3(solution.virtualTarget.x, 0.02, solution.virtualTarget.y),
+          new THREE.Vector3(solution.virtualTarget.x, HUB_HEIGHT, solution.virtualTarget.y),
+        ]);
+        vtLine.computeLineDistances();
+
+        // 落点
+        impactMesh.position.set(solution.impactPoint.x, HUB_HEIGHT, solution.impactPoint.y);
+        impactMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
+
+        // 弹道轨迹
+        updateTrajectory(solution);
+      }
+
+      // ===== UI 控件绑定 =====
+      const controlMap = {};
+      document.querySelectorAll(".control-row").forEach((row) => {
+        const key = row.dataset.key;
+        const range = row.querySelector('input[type="range"]');
+        const number = row.querySelector('input[type="number"]');
+        controlMap[key] = { range, number };
+
+        const update = (value) => {
+          const parsed = Number(value);
+          if (Number.isNaN(parsed)) return;
+          state[key] = parsed;
+          range.value = parsed;
+          number.value = parsed.toFixed(2);
+        };
+
+        range.addEventListener("input", (e) => update(e.target.value));
+        number.addEventListener("input", (e) => update(e.target.value));
+      });
+
+      function updateControl(key, value) {
+        const control = controlMap[key];
+        if (!control) return;
+        control.range.value = value;
+        control.number.value = value.toFixed(2);
+      }
+
+      document.getElementById("shootOnMove").addEventListener("change", (e) => {
+        state.shootOnMove = e.target.checked;
+      });
+
+      // ===== 键盘控制 =====
+      container.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (key in keys) {
+          keys[key] = true;
+          e.preventDefault();
+        }
+        if (key === ' ') {
+          state.robotVx = 0;
+          state.robotVy = 0;
+          e.preventDefault();
+        }
+      });
+
+      container.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (key in keys) {
+          keys[key] = false;
+          e.preventDefault();
+        }
+      });
+
+      container.addEventListener('click', () => container.focus());
+
+      // ===== 游戏循环 =====
+      let lastTime = performance.now();
+
+      function gameLoop() {
+        const now = performance.now();
+        const dt = (now - lastTime) / 1000;
+        lastTime = now;
+
+        // WASD 控制
+        let targetVx = 0, targetVy = 0;
+        if (keys.w) targetVx += 1;
+        if (keys.s) targetVx -= 1;
+        if (keys.a) targetVy -= 1;
+        if (keys.d) targetVy += 1;
+
+        const targetDirLen = Math.hypot(targetVx, targetVy);
+        if (targetDirLen > 0.01) {
+          targetVx /= targetDirLen;
+          targetVy /= targetDirLen;
+        }
+
+        const desiredVx = targetVx * state.maxLinearSpeed;
+        const desiredVy = targetVy * state.maxLinearSpeed;
+
+        // 加速度限制
+        const dvx = desiredVx - state.robotVx;
+        const dvy = desiredVy - state.robotVy;
+        const accelNeeded = Math.hypot(dvx, dvy) / dt;
+
+        if (accelNeeded > state.maxAcceleration) {
+          const scale = (state.maxAcceleration * dt) / Math.hypot(dvx, dvy);
+          state.robotVx += dvx * scale;
+          state.robotVy += dvy * scale;
+        } else {
+          state.robotVx = desiredVx;
+          state.robotVy = desiredVy;
+        }
+
+        // 速度限制
+        const currentSpeed = Math.hypot(state.robotVx, state.robotVy);
+        if (currentSpeed > state.maxLinearSpeed) {
+          const scale = state.maxLinearSpeed / currentSpeed;
+          state.robotVx *= scale;
+          state.robotVy *= scale;
+        }
+
+        // 更新位置
+        state.robotX += state.robotVx * dt;
+        state.robotY += state.robotVy * dt;
+
+        // 边界
+        state.robotX = Math.max(0.3, Math.min(FIELD_LENGTH - 0.3, state.robotX));
+        state.robotY = Math.max(0.3, Math.min(FIELD_WIDTH - 0.3, state.robotY));
+
+        // 计算射球解决方案
+        const solution = computeShootingSolution();
+
+        // 自动追踪：底盘朝向跟随 chassisHeading
+        const targetHeading = solution.chassisHeading;
+        let headingError = targetHeading - state.chassisHeading;
+        while (headingError > Math.PI) headingError -= Math.PI * 2;
+        while (headingError < -Math.PI) headingError += Math.PI * 2;
+
+        const MAX_OMEGA = 6.0;
+        const OMEGA_GAIN = 4.0;
+        const omega = Math.max(-MAX_OMEGA, Math.min(MAX_OMEGA, headingError * OMEGA_GAIN));
+        state.chassisHeading += omega * dt;
+
+        // 更新控件显示
+        updateControl("robotX", state.robotX);
+        updateControl("robotY", state.robotY);
+
+        updateScene(solution);
+      }
+
+      // ===== 动画循环 =====
+      function animate() {
+        requestAnimationFrame(animate);
+        gameLoop();
+        orbitControls.update();
+        renderer.render(scene, camera);
+      }
+
+      // ===== 窗口调整 =====
+      window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      });
+
+      // ===== 启动 =====
+      container.focus();
+      animate();
+    </script>
+  </body>
+</html>
