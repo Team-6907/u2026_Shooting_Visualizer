@@ -11,7 +11,7 @@ FRC 2026 Shoot-on-Move 可视化工具，基于物理模型模拟动态射球补
 
 ## 使用
 
-在线访问：https://mzwang828.github.io/u2026_Shooting_Visualizer/
+在线访问：https://team-6907.github.io/u2026_Shooting_Visualizer/
 
 或本地打开 `index.html`
 
