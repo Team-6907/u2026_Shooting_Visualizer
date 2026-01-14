@@ -27,3 +27,7 @@ export const DEFAULT_TARGET = {
 export const HUB_OPENING_SIZE = 1.06;
 export const HUB_HALF_WIDTH = 0.6;
 export const SCORING_OPENING_SIZE = Math.max(HUB_OPENING_SIZE - 2 * BALL_RADIUS, 0.1);
+
+// 物理引擎参数
+export const PHYSICS_DT = 1 / 60; // 固定物理步进时间步长
+export const HUB_HEIGHT = 1.83; // HUB 高度 (官方规格: 72in)

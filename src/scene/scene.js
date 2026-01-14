@@ -11,17 +11,45 @@ import {
   FIELD_WIDTH,
   GRAVITY,
   MAX_SHOTS,
+  PHYSICS_DT,
   SHOT_INTERVAL,
   SHOT_LIFETIME,
   TRAJ_DT,
   TRAJ_MAX_TIME,
 } from "../core/config.js";
 import { getTargetHeight } from "../core/solver.js";
+import { isRapierReady } from "../physics/rapier.js";
+import {
+  createPhysicsWorld,
+  createFieldColliders,
+  createFieldMeshCollider,
+  stepPhysicsWorld,
+} from "../physics/world.js";
+import { extractCollidersFromModel, buildTrimeshFromModel } from "../physics/extractor.js";
+import { createBallBody, updateBallPhysics, getBallTransform, removeBallBody } from "../physics/ball.js";
+import { createRobotBody, updateRobotBody } from "../physics/robot.js";
 
 const ROBOT_HEADING_OFFSET = 0;
 const ROBOT_MODEL_YAW_OFFSET = 0;
 const ROBOT_MODEL_PITCH_OFFSET = -Math.PI / 2;
 const ROBOT_MODEL_ROLL_OFFSET = 0;
+
+const USE_FIELD_TRIMESH = true;
+const FIELD_TRIMESH_MIN_SIZE = 0.2;
+const FIELD_TRIMESH_EXCLUDE = /Bump/i;
+
+const USE_HUB_TRIMESH = true;
+const HUB_TRIMESH_MIN_SIZE = 0.15;
+const HUB_TRIMESH_INCLUDE = /GE-263/i;
+const HUB_TRIMESH_MATERIAL = { restitution: 0.05, friction: 0.4 };
+
+const USE_ROBOT_PHYSICS = false;
+const ROBOT_COLLIDER_FOOTPRINT_SCALE = 0.9;
+const ROBOT_COLLIDER_MAX_HEIGHT = 0.35;
+const ROBOT_COLLIDER_MIN_FOOTPRINT = 0.3;
+const ROBOT_CONTROLLER_OFFSET = 0.02;
+const ROBOT_SNAP_TO_GROUND = 0.03;
+const ROBOT_MAX_SLOPE = Math.PI / 4;
 
 export function createScene(container, state) {
   const scene = new THREE.Scene();
@@ -63,6 +91,119 @@ export function createScene(container, state) {
 
   const fieldGroup = new THREE.Group();
   scene.add(fieldGroup);
+
+  // 物理世界（Rapier 加载后初始化）
+  let physics = null;
+  let physicsAccumulator = 0;
+  let pendingColliders = null; // 等待物理世界初始化后创建的碰撞体
+  let fieldCollidersCreated = false;
+  let pendingFieldMesh = null;
+  let fieldMeshCreated = false;
+  let pendingHubMesh = null;
+  let hubMeshCreated = false;
+  let pendingRobotCollider = null;
+  let robotBody = null;
+  let robotCollider = null;
+  let robotController = null;
+
+  // 调试可视化组
+  const debugGroup = new THREE.Group();
+  debugGroup.name = "PhysicsDebug";
+  scene.add(debugGroup);
+  const DEBUG_COLLIDERS = true; // 设为 true 显示碰撞体线框
+
+  /**
+   * 添加碰撞体可视化线框
+   */
+  function addColliderDebugBox(center, size, color = 0x00ff00) {
+    if (!DEBUG_COLLIDERS) return;
+    const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+    const edges = new THREE.EdgesGeometry(geometry);
+    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+    const wireframe = new THREE.LineSegments(edges, material);
+    wireframe.position.set(center.x, center.y, center.z);
+    debugGroup.add(wireframe);
+    geometry.dispose();
+  }
+
+  /**
+   * 可视化所有提取的碰撞体
+   */
+  function visualizeColliders(colliders) {
+    // 清除旧的可视化
+    while (debugGroup.children.length > 0) {
+      const child = debugGroup.children[0];
+      debugGroup.remove(child);
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    }
+
+    // HUB - 红色
+    for (const hub of colliders.hubs) {
+      addColliderDebugBox(hub.center, hub.size, 0xff0000);
+    }
+
+    // BUMP - 黄色
+    for (const bump of colliders.bumps) {
+      addColliderDebugBox(bump.center, bump.size, 0xffff00);
+    }
+
+    console.log(
+      `[Debug] Visualized ${colliders.hubs.length} HUBs, ${colliders.bumps?.length || 0} BUMPs`
+    );
+  }
+
+  // 延迟初始化物理世界
+  function initPhysicsIfReady() {
+    if (!physics && isRapierReady()) {
+      physics = createPhysicsWorld();
+      console.log("[Scene] Physics world initialized");
+    }
+
+    // 如果有待处理的碰撞体，现在创建
+    if (physics && pendingColliders && !fieldCollidersCreated) {
+      createFieldColliders(physics, pendingColliders, { enableHub: !USE_HUB_TRIMESH });
+      visualizeColliders(pendingColliders);
+      fieldCollidersCreated = true;
+      console.log("[Scene] Field colliders created (deferred)");
+    }
+
+    if (physics && pendingFieldMesh && !fieldMeshCreated) {
+      createFieldMeshCollider(physics, pendingFieldMesh);
+      fieldMeshCreated = true;
+      console.log("[Scene] Field mesh collider created (deferred)");
+    }
+
+    if (physics && pendingHubMesh && !hubMeshCreated) {
+      createFieldMeshCollider(physics, pendingHubMesh, HUB_TRIMESH_MATERIAL);
+      hubMeshCreated = true;
+      console.log("[Scene] Hub mesh collider created (deferred)");
+    }
+
+    if (USE_ROBOT_PHYSICS && physics && pendingRobotCollider && !robotBody) {
+      const robotShape = createRobotBody(physics.world, {
+        position: {
+          x: state.robotX,
+          y: 0,
+          z: state.robotY,
+        },
+        yaw: -state.chassisHeading + ROBOT_HEADING_OFFSET,
+        size: pendingRobotCollider.size,
+        offset: pendingRobotCollider.offset,
+      });
+      robotBody = robotShape.body;
+      robotCollider = robotShape.collider;
+      console.log("[Scene] Robot collider created");
+    }
+    if (USE_ROBOT_PHYSICS && physics && robotCollider && !robotController) {
+      robotController = physics.world.createCharacterController(ROBOT_CONTROLLER_OFFSET);
+      robotController.setUp({ x: 0, y: 1, z: 0 });
+      robotController.setSlideEnabled(true);
+      robotController.enableSnapToGround(ROBOT_SNAP_TO_GROUND);
+      robotController.setMaxSlopeClimbAngle(ROBOT_MAX_SLOPE);
+    }
+    return physics !== null;
+  }
 
   const gltfLoader = new GLTFLoader();
   const robotConfigPromise = fetch("assets/Robot_2026FRCKitBotV1/config.json")
@@ -168,6 +309,48 @@ export function createScene(container, state) {
       });
 
       fieldGroup.add(model);
+
+      // 模型变换完成后，提取碰撞体
+      const extractedColliders = extractCollidersFromModel(model);
+      const fieldMeshData = USE_FIELD_TRIMESH
+        ? buildTrimeshFromModel(model, {
+            minSize: FIELD_TRIMESH_MIN_SIZE,
+            excludePattern: FIELD_TRIMESH_EXCLUDE,
+            fieldBounds: extractedColliders.fieldBounds,
+            skipBoundaryMeshes: true,
+          })
+        : null;
+      const hubMeshData = USE_HUB_TRIMESH
+        ? buildTrimeshFromModel(model, {
+            minSize: HUB_TRIMESH_MIN_SIZE,
+            includePattern: HUB_TRIMESH_INCLUDE,
+          })
+        : null;
+
+      // 可视化提取的碰撞体（调试用）
+      visualizeColliders(extractedColliders);
+
+      // 如果物理世界已准备好，立即创建碰撞体；否则保存等待
+      if (initPhysicsIfReady() && !fieldCollidersCreated) {
+        createFieldColliders(physics, extractedColliders, { enableHub: !USE_HUB_TRIMESH });
+        fieldCollidersCreated = true;
+        console.log("[Scene] Field colliders created from model");
+        if (fieldMeshData && !fieldMeshCreated) {
+          createFieldMeshCollider(physics, fieldMeshData);
+          fieldMeshCreated = true;
+          console.log("[Scene] Field mesh collider created from model");
+        }
+        if (hubMeshData && !hubMeshCreated) {
+          createFieldMeshCollider(physics, hubMeshData, HUB_TRIMESH_MATERIAL);
+          hubMeshCreated = true;
+          console.log("[Scene] Hub mesh collider created from model");
+        }
+      } else {
+        pendingColliders = extractedColliders;
+        pendingFieldMesh = fieldMeshData;
+        pendingHubMesh = hubMeshData;
+        console.log("[Scene] Field colliders extraction complete, waiting for physics init");
+      }
     },
     undefined,
     (error) => {
@@ -244,6 +427,45 @@ export function createScene(container, state) {
         });
 
         robotVisual.add(model);
+
+        if (USE_ROBOT_PHYSICS) {
+          robotVisual.updateMatrixWorld(true);
+          const robotBox = new THREE.Box3().setFromObject(robotVisual);
+          const robotSize = new THREE.Vector3();
+          const robotCenter = new THREE.Vector3();
+          robotBox.getSize(robotSize);
+          robotBox.getCenter(robotCenter);
+          const footprintX = Math.max(
+            robotSize.x * ROBOT_COLLIDER_FOOTPRINT_SCALE,
+            ROBOT_COLLIDER_MIN_FOOTPRINT
+          );
+          const footprintZ = Math.max(
+            robotSize.z * ROBOT_COLLIDER_FOOTPRINT_SCALE,
+            ROBOT_COLLIDER_MIN_FOOTPRINT
+          );
+          const colliderHeight = Math.min(robotSize.y, ROBOT_COLLIDER_MAX_HEIGHT);
+          const offsetY = robotBox.min.y + colliderHeight / 2;
+          pendingRobotCollider = {
+            size: { x: footprintX, y: colliderHeight, z: footprintZ },
+            offset: { x: robotCenter.x, y: offsetY, z: robotCenter.z },
+          };
+
+          if (initPhysicsIfReady() && !robotBody) {
+            const robotShape = createRobotBody(physics.world, {
+              position: {
+                x: state.robotX,
+                y: 0,
+                z: state.robotY,
+              },
+              yaw: -state.chassisHeading + ROBOT_HEADING_OFFSET,
+              size: pendingRobotCollider.size,
+              offset: pendingRobotCollider.offset,
+            });
+            robotBody = robotShape.body;
+            robotCollider = robotShape.collider;
+            console.log("[Scene] Robot collider created from model");
+          }
+        }
       });
     },
     undefined,
@@ -363,18 +585,41 @@ export function createScene(container, state) {
   function spawnShot(solution) {
     const shotData = buildFuelShot();
     const shot = shotData.object;
-    const x = solution.launcherX;
-    const y = solution.launcherY;
-    const z = solution.launcherZ;
-    shot.position.set(x, z, y);
+
+    // 坐标映射: state (x, y, z) -> Three.js (x, z, y) -> Rapier (x, y, z)
+    // solution.launcherX/Y 是场地平面坐标，launcherZ 是高度
+    // Three.js: position.set(launcherX, launcherZ, launcherY)
+    // Rapier: position (launcherX, launcherZ, launcherY)
+    const posX = solution.launcherX;
+    const posY = solution.launcherZ; // 高度
+    const posZ = solution.launcherY;
+
+    // 速度映射: ballVx, ballVy 是场地平面速度，vz 是垂直速度
+    const velX = solution.ballVx;
+    const velY = solution.vz; // 垂直速度
+    const velZ = solution.ballVy;
+
+    shot.position.set(posX, posY, posZ);
     shotsGroup.add(shot);
+
+    // 创建物理球体（如果物理引擎可用）
+    let body = null;
+    if (physics) {
+      body = createBallBody(
+        physics.world,
+        { x: posX, y: posY, z: posZ },
+        { x: velX, y: velY, z: velZ }
+      );
+    }
 
     shots.push({
       object: shot,
       materials: shotData.materials,
-      x,
-      y,
-      z,
+      body, // 物理刚体
+      // 保留旧的字段用于回退（物理不可用时）
+      x: solution.launcherX,
+      y: solution.launcherY,
+      z: solution.launcherZ,
       vx: solution.ballVx,
       vy: solution.ballVy,
       vz: solution.vz,
@@ -385,10 +630,37 @@ export function createScene(container, state) {
       const old = shots.shift();
       shotsGroup.remove(old.object);
       old.materials.forEach((mat) => mat.dispose());
+      if (old.body && physics) {
+        removeBallBody(physics.world, old.body);
+      }
     }
   }
 
   function updateShots(dt, solution) {
+    // 尝试初始化物理（如果尚未初始化）
+    initPhysicsIfReady();
+
+    // 物理世界步进（固定时间步长）
+    if (physics) {
+      physicsAccumulator += dt;
+      while (physicsAccumulator >= PHYSICS_DT) {
+        if (USE_ROBOT_PHYSICS && robotBody) {
+          updateRobotBody(robotBody, {
+            position: { x: state.robotX, y: 0, z: state.robotY },
+            yaw: -state.chassisHeading + ROBOT_HEADING_OFFSET,
+          });
+        }
+        // 应用二次空气阻力到所有球
+        for (const shot of shots) {
+          if (shot.body) {
+            updateBallPhysics(shot.body, PHYSICS_DT);
+          }
+        }
+        stepPhysicsWorld(physics.world);
+        physicsAccumulator -= PHYSICS_DT;
+      }
+    }
+
     const targetHeight = getTargetHeight(state);
     if (solution && solution.isValid) {
       shotTimer += dt;
@@ -404,28 +676,58 @@ export function createScene(container, state) {
       const shot = shots[i];
       shot.age += dt;
 
-      const speed = Math.hypot(shot.vx, shot.vy, shot.vz);
-      const ax = -DRAG_K * speed * shot.vx;
-      const ay = -DRAG_K * speed * shot.vy;
-      const az = -GRAVITY - DRAG_K * speed * shot.vz;
+      if (shot.body && physics) {
+        // 物理引擎驱动：从物理体读取位置
+        const transform = getBallTransform(shot.body);
+        shot.object.position.set(transform.position.x, transform.position.y, transform.position.z);
+        shot.object.quaternion.set(
+          transform.quaternion.x,
+          transform.quaternion.y,
+          transform.quaternion.z,
+          transform.quaternion.w
+        );
 
-      shot.vx += ax * dt;
-      shot.vy += ay * dt;
-      shot.vz += az * dt;
+        // 更新内部状态用于移除判断
+        shot.x = transform.position.x;
+        shot.z = transform.position.y; // Y 是高度
+        shot.y = transform.position.z;
+      } else {
+        // 回退：手动物理计算（物理引擎不可用时）
+        const speed = Math.hypot(shot.vx, shot.vy, shot.vz);
+        const ax = -DRAG_K * speed * shot.vx;
+        const ay = -DRAG_K * speed * shot.vy;
+        const az = -GRAVITY - DRAG_K * speed * shot.vz;
 
-      shot.x += shot.vx * dt;
-      shot.y += shot.vy * dt;
-      shot.z += shot.vz * dt;
+        shot.vx += ax * dt;
+        shot.vy += ay * dt;
+        shot.vz += az * dt;
 
-      shot.object.position.set(shot.x, shot.z, shot.y);
+        shot.x += shot.vx * dt;
+        shot.y += shot.vy * dt;
+        shot.z += shot.vz * dt;
+
+        shot.object.position.set(shot.x, shot.z, shot.y);
+      }
+
+      // 透明度衰减
       const opacity = Math.max(0, 0.95 - shot.age / SHOT_LIFETIME);
       shot.materials.forEach((mat) => {
         mat.opacity = opacity;
       });
 
-      if ((shot.vz < 0 && shot.z <= targetHeight) || shot.z < BALL_RADIUS || shot.age > SHOT_LIFETIME) {
+      // 移除条件：落到地面以下或超时
+      const shouldRemove =
+        shot.z < BALL_RADIUS * 0.5 || // 高度低于半个球
+        shot.age > SHOT_LIFETIME ||
+        shot.x < -1 || shot.x > FIELD_LENGTH + 1 || // 出界
+        shot.y < -1 || shot.y > FIELD_WIDTH + 1;
+
+      if (shouldRemove) {
         shotsGroup.remove(shot.object);
         shot.materials.forEach((mat) => mat.dispose());
+        if (shot.body && physics) {
+          removeBallBody(physics.world, shot.body);
+        }
         shots.splice(i, 1);
       }
     }
@@ -540,6 +842,38 @@ export function createScene(container, state) {
     updateTrajectory(solution);
   }
 
+  function resolveRobotMovement(state, desiredDx, desiredDy, dt) {
+    if (!USE_ROBOT_PHYSICS) {
+      return false;
+    }
+    if (!initPhysicsIfReady() || !robotCollider || !robotController) {
+      return false;
+    }
+
+    robotController.computeColliderMovement(
+      robotCollider,
+      { x: desiredDx, y: 0, z: desiredDy },
+      undefined
+    );
+    const movement = robotController.computedMovement();
+
+    state.robotX += movement.x;
+    state.robotY += movement.z;
+    if (dt > 0) {
+      state.robotVx = movement.x / dt;
+      state.robotVy = movement.z / dt;
+    }
+
+    if (robotBody) {
+      updateRobotBody(robotBody, {
+        position: { x: state.robotX, y: 0, z: state.robotY },
+        yaw: -state.chassisHeading + ROBOT_HEADING_OFFSET,
+      });
+    }
+
+    return true;
+  }
+
   function tick(solution, dt) {
     updateScene(solution);
     updateShots(dt, solution);
@@ -557,6 +891,7 @@ export function createScene(container, state) {
   }
 
   return {
+    resolveRobotMovement,
     tick,
     render,
     resize,

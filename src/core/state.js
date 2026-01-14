@@ -2,8 +2,8 @@ import { DEFAULT_TARGET } from "./config.js";
 
 export function createState() {
   return {
-    robotX: 2.0,
-    robotY: 4.035,
+    robotX: 3.44,
+    robotY: 5.24,
     robotVx: 0,
     robotVy: 0,
     chassisHeading: 0,

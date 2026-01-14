@@ -7,6 +7,16 @@ import { bindKeyboard } from "./input/keyboard.js";
 import { createScene } from "./scene/scene.js";
 import { initControls } from "./ui/controls.js";
 import { initMetrics } from "./ui/metrics.js";
+import { initRapier } from "./physics/rapier.js";
+
+// 初始化 Rapier WASM（异步）
+initRapier()
+  .then(() => {
+    console.log("[Main] Rapier physics engine ready");
+  })
+  .catch((err) => {
+    console.warn("[Main] Failed to initialize Rapier, falling back to manual physics:", err);
+  });
 
 const container = document.getElementById("canvas-container");
 if (!container) {
@@ -63,11 +73,17 @@ function gameLoop(dt) {
     state.robotVy *= scale;
   }
 
-  state.robotX += state.robotVx * dt;
-  state.robotY += state.robotVy * dt;
+  const desiredDx = state.robotVx * dt;
+  const desiredDy = state.robotVy * dt;
+  const resolved = scene.resolveRobotMovement(state, desiredDx, desiredDy, dt);
 
-  state.robotX = Math.max(0.3, Math.min(FIELD_LENGTH - 0.3, state.robotX));
-  state.robotY = Math.max(0.3, Math.min(FIELD_WIDTH - 0.3, state.robotY));
+  if (!resolved) {
+    state.robotX += desiredDx;
+    state.robotY += desiredDy;
+
+    state.robotX = Math.max(0.3, Math.min(FIELD_LENGTH - 0.3, state.robotX));
+    state.robotY = Math.max(0.3, Math.min(FIELD_WIDTH - 0.3, state.robotY));
+  }
 
   solverAccumulator += dt;
   if (!cachedSolution || solverAccumulator >= solverInterval) {
