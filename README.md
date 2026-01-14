@@ -1,6 +1,6 @@
-# FRC 动态射球可视化
+# GOATSim-Shooting 模拟器 for Rebuilt
 
-FRC 2026 Shoot-on-Move 可视化工具，基于物理模型模拟动态射球补偿。
+FRC 2026 Rebuilt 射球可视化工具，基于物理模型模拟动态射球补偿。
 
 ## 功能
 
