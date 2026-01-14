@@ -1,43 +1,46 @@
-# GOATSim-Shooting 模拟器 for Rebuilt
+# GOATSim-Shooting (Rebuilt)
 
-FRC 2026 Rebuilt 射球可视化工具，基于物理模型模拟动态射球补偿。
+Quick-start shooting visualizer for FRC 2026 Rebuilt with physics-based shoot-on-move simulation.
 
-## 功能
+[中文版本](README.zh.md)
 
-- 3D 场景可视化
-- 实时弹道轨迹
-- 动态补偿算法 (shoot-on-move)
-- 可调机构参数：发射高度、Hood 角度范围、入射角、飞轮速度
+- Live demo: https://team-6907.github.io/u2026_Shooting_Visualizer/
 
-## 使用
+<table>
+  <tr>
+    <td><img src="assets/shoot_on_the_move.gif" width="430" alt="Shoot on the move" /></td>
+    <td><img src="assets/interaction.gif" width="360" alt="Interaction demo" /></td>
+  </tr>
+</table>
 
-在线访问：https://team-6907.github.io/u2026_Shooting_Visualizer/
+### Features
 
-### 本地开发（Vite）
+- 3D field visualization
+- Live trajectory and impact point
+- Shoot-on-move compensation
+- Tunable mechanism parameters
 
-本项目使用 Vite 进行构建与开发。首次运行需要安装依赖。
+### Quick start
 
 ```bash
 npm install
 npm run dev
 ```
 
-浏览器访问：`http://localhost:5173`
-
-#### 构建与预览
+Open: `http://localhost:5173`
 
 ```bash
 npm run build
 npm run preview
 ```
 
-构建产物位于 `dist/`，用于 GitHub Pages 部署。
+### Controls
 
-> GitHub Pages 部署需要正确设置 `vite.config.js` 的 `base` 为仓库名路径。
+- `WASD` - move robot
+- `Space` - stop
+- Mouse drag - orbit camera
+- Scroll wheel - zoom
 
-## 控制
+### Acknowledgements
 
-- `WASD` - 移动机器人
-- `Space` - 停止
-- 鼠标拖拽 - 旋转视角
-- 滚轮 - 缩放
+- 3D models from Team 6328's AdvantageScope: https://docs.advantagescope.org/
