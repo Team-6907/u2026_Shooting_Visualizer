@@ -16,18 +16,30 @@ Quick-start shooting visualizer for FRC 2026 Rebuilt with physics-based shoot-on
 ### Features
 
 - 3D field visualization
-- Live trajectory and impact point
-- Shoot-on-move compensation
-- Tunable mechanism parameters
+- Physics-based solver with drag + gravity (ballistics)
+- Shoot-on-move compensation using robot velocity + virtual target
+- Live trajectory/impact prediction and target validation
+- Rapier physics engine integration for ball flight
+- Distance-based shot dispersion
+- Tunable mechanism parameters, including Target point (m) sliders for impact target
 
-### Quick start
+### Quick start (local)
 
 ```bash
+git clone https://github.com/Team-6907/u2026_Shooting_Visualizer.git
+cd u2026_Shooting_Visualizer
 npm install
+```
+
+Dev server:
+
+```bash
 npm run dev
 ```
 
 Open: `http://localhost:5173`
+
+Build + preview (optional):
 
 ```bash
 npm run build
