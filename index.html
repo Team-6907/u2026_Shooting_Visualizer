@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shoot-on-Move Visualizer</title>
+    <link rel="icon" type="image/png" href="assets/rebuilt_logo.png" />
+    <link rel="shortcut icon" type="image/png" href="assets/rebuilt_logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -176,6 +178,23 @@
         color: var(--muted);
       }
 
+      .reset-button {
+        border: 1px solid var(--outline);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        padding: 8px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .reset-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px var(--shadow);
+      }
+
       .camera-hint {
         position: absolute;
         bottom: 20px;
@@ -277,8 +296,8 @@
 
           <label>最小入射角 (°)</label>
           <div class="control-row" data-key="minEntryAngle">
-            <input type="range" min="15" max="60" step="5" value="30" />
-            <input type="number" step="5" value="30" />
+            <input type="range" min="15" max="60" step="5" value="45" />
+            <input type="number" step="5" value="45" />
           </div>
 
           <label>飞轮最高速 (m/s)</label>
@@ -286,6 +305,48 @@
             <input type="range" min="10" max="45" step="1" value="25" />
             <input type="number" step="1" value="25" />
           </div>
+
+          <label>发射口偏移 X (m)</label>
+          <div class="control-row" data-key="launcherOffsetX">
+            <input type="range" min="-1.0" max="1.0" step="0.01" value="-0.53" />
+            <input type="number" step="0.01" value="-0.53" />
+          </div>
+
+          <label>发射口偏移 Y (m)</label>
+          <div class="control-row" data-key="launcherOffsetY">
+            <input type="range" min="-1.0" max="1.0" step="0.01" value="0.05" />
+            <input type="number" step="0.01" value="0.05" />
+          </div>
+
+          <label>发射口偏移 Z (m)</label>
+          <div class="control-row" data-key="launcherOffsetZ">
+            <input type="range" min="0.0" max="1.5" step="0.01" value="0.03" />
+            <input type="number" step="0.01" value="0.03" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label style="font-weight: bold; color: #2a9d8f;">🎯 目标射击点 (m)</label>
+
+          <label>目标 X</label>
+          <div class="control-row" data-key="targetX">
+            <input type="range" min="0" max="16.54" step="0.01" value="5.58" />
+            <input type="number" step="0.01" value="5.58" />
+          </div>
+
+          <label>目标 Y</label>
+          <div class="control-row" data-key="targetY">
+            <input type="range" min="0" max="8.07" step="0.01" value="3.35" />
+            <input type="number" step="0.01" value="3.35" />
+          </div>
+
+          <label>目标 Z</label>
+          <div class="control-row" data-key="targetZ">
+            <input type="range" min="0.5" max="3.0" step="0.01" value="1.23" />
+            <input type="number" step="0.01" value="1.23" />
+          </div>
+
+          <button class="reset-button" id="resetTarget" type="button">恢复默认</button>
         </div>
 
         <div class="metrics">
@@ -325,16 +386,31 @@
     <script type="module">
       import * as THREE from 'three';
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
       // ===== 常量定义 =====
       const FIELD_LENGTH = 16.54;
       const FIELD_WIDTH = 8.07;
       const GRAVITY = 9.81;
 
-      const HUB_X = 4.03;
-      const HUB_Y = 4.035;
-      const HUB_HEIGHT = 1.83;
-      const HUB_BASE_SIZE = 1.19;
+      const BALL_DIAMETER = 0.15;
+      const BALL_RADIUS = BALL_DIAMETER / 2;
+      const BALL_MASS = 0.2;
+      const AIR_DENSITY = 1.225;
+      const BALL_CD = 0.47;
+      const BALL_AREA = Math.PI * BALL_RADIUS * BALL_RADIUS;
+      const DRAG_K = 0.5 * AIR_DENSITY * BALL_CD * BALL_AREA / BALL_MASS;
+      const SIM_DT = 1 / 240;
+      const MAX_SIM_TIME = 4.0;
+      const TRAJ_DT = 1 / 120;
+      const TRAJ_MAX_TIME = 3.5;
+      const SHOT_INTERVAL = 0.25;
+      const SHOT_LIFETIME = 3.2;
+      const MAX_SHOTS = 36;
+
+      const DEFAULT_TARGET_X = 5.58;
+      const DEFAULT_TARGET_Y = 3.35;
+      const DEFAULT_TARGET_HEIGHT = 1.23;
       const HUB_OPENING_SIZE = 1.06;
 
       // ===== 状态变量 =====
@@ -352,8 +428,14 @@
         launcherHeight: 0.5,    // 发射高度 (m)
         minHoodAngle: 45,       // Hood 最小角度 (deg)
         maxHoodAngle: 90,       // Hood 最大角度 (deg)
-        minEntryAngle: 30,      // 最小下落角度 (deg)
+        minEntryAngle: 45,      // 最小下落角度 (deg)
         maxFlywheelSpeed: 25,   // 飞轮最高速度 (m/s)
+        targetX: DEFAULT_TARGET_X,
+        targetY: DEFAULT_TARGET_Y,
+        targetZ: DEFAULT_TARGET_HEIGHT,
+        launcherOffsetX: -0.53,
+        launcherOffsetY: 0.05,
+        launcherOffsetZ: 0.03,
       };
 
       const keys = { w: false, a: false, s: false, d: false };
@@ -369,14 +451,191 @@
 
       // ===== 物理计算函数 =====
 
-      // HUB 底座半宽 (球在水平到达这个位置时必须已高于 HUB 顶部)
+      // HUB 底座半宽 (球到达边缘时必须清空边缘高度)
       const HUB_HALF_WIDTH = 0.6;
+
+      function getTargetHeight() {
+        return state.targetZ + BALL_RADIUS;
+      }
+
+      function getLauncherWorldOffset() {
+        const cosH = Math.cos(state.chassisHeading);
+        const sinH = Math.sin(state.chassisHeading);
+        const localX = state.launcherOffsetX;
+        const localY = state.launcherOffsetY;
+        return {
+          x: cosH * localX - sinH * localY,
+          y: sinH * localX + cosH * localY,
+          z: state.launcherOffsetZ,
+        };
+      }
+
+      function sampleAtX(prev, curr, targetX) {
+        const dx = curr.x - prev.x;
+        const ratio = dx !== 0 ? (targetX - prev.x) / dx : 0;
+        return {
+          t: prev.t + (curr.t - prev.t) * ratio,
+          x: targetX,
+          z: prev.z + (curr.z - prev.z) * ratio,
+          vx: prev.vx + (curr.vx - prev.vx) * ratio,
+          vz: prev.vz + (curr.vz - prev.vz) * ratio,
+        };
+      }
+
+      function sampleAtZ(prev, curr, targetZ) {
+        const dz = curr.z - prev.z;
+        if (Math.abs(dz) < 1e-6) return null;
+        const ratio = (targetZ - prev.z) / dz;
+        return {
+          t: prev.t + (curr.t - prev.t) * ratio,
+          x: prev.x + (curr.x - prev.x) * ratio,
+          z: targetZ,
+          vx: prev.vx + (curr.vx - prev.vx) * ratio,
+          vz: prev.vz + (curr.vz - prev.vz) * ratio,
+        };
+      }
+
+      function simulateShotToRange(angle, speed, targetRange, edgeRange) {
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+        let vx = speed * cosA;
+        let vz = speed * sinA;
+        let x = 0;
+        let z = 0;
+        let t = 0;
+        let edgeSample = null;
+        let targetSample = null;
+        let prev = { x, z, vx, vz, t };
+
+        const maxX = Math.max(targetRange, edgeRange, 0) + 1.0;
+
+        while (t < MAX_SIM_TIME && z > -2 && x <= maxX) {
+          const v = Math.hypot(vx, vz);
+          const ax = -DRAG_K * v * vx;
+          const az = -GRAVITY - DRAG_K * v * vz;
+
+          vx += ax * SIM_DT;
+          vz += az * SIM_DT;
+          x += vx * SIM_DT;
+          z += vz * SIM_DT;
+          t += SIM_DT;
+
+          const curr = { x, z, vx, vz, t };
+
+          if (!edgeSample && edgeRange > 0 && x >= edgeRange) {
+            edgeSample = sampleAtX(prev, curr, edgeRange);
+          }
+
+          if (x >= targetRange) {
+            targetSample = sampleAtX(prev, curr, targetRange);
+            break;
+          }
+
+          if (vx <= 0 && x < targetRange) {
+            break;
+          }
+
+          prev = curr;
+        }
+
+        return {
+          reached: !!targetSample,
+          timeAtRange: targetSample ? targetSample.t : Infinity,
+          zAtRange: targetSample ? targetSample.z : -Infinity,
+          vxAtRange: targetSample ? targetSample.vx : 0,
+          vzAtRange: targetSample ? targetSample.vz : 0,
+          zAtEdge: edgeSample ? edgeSample.z : -Infinity,
+          timeAtEdge: edgeSample ? edgeSample.t : Infinity,
+        };
+      }
+
+      function solveSpeedForAngle(angle, targetRange, deltaH, edgeRange, maxSpeed) {
+        const minSpeed = 0.5;
+        let low = minSpeed;
+        let high = maxSpeed;
+        let lowSim = simulateShotToRange(angle, low, targetRange, edgeRange);
+        let highSim = simulateShotToRange(angle, high, targetRange, edgeRange);
+
+        if (!highSim.reached || highSim.zAtRange < deltaH) return null;
+
+        if (lowSim.reached && lowSim.zAtRange > deltaH) {
+          for (let i = 0; i < 6 && low > 0.1 && lowSim.zAtRange > deltaH; i++) {
+            low *= 0.5;
+            lowSim = simulateShotToRange(angle, low, targetRange, edgeRange);
+          }
+        }
+
+        for (let i = 0; i < 10; i++) {
+          const mid = (low + high) / 2;
+          const midSim = simulateShotToRange(angle, mid, targetRange, edgeRange);
+          const midZ = midSim.reached ? midSim.zAtRange : -Infinity;
+          if (midZ >= deltaH) {
+            high = mid;
+            highSim = midSim;
+          } else {
+            low = mid;
+            lowSim = midSim;
+          }
+        }
+
+        return { speed: high, sim: highSim };
+      }
+
+      function simulateShotToHeight(vHorizontal, vz0, targetHeight) {
+        let vx = vHorizontal;
+        let vz = vz0;
+        let x = 0;
+        let z = 0;
+        let t = 0;
+        let prev = { x, z, vx, vz, t };
+        let reachedUp = false;
+
+        while (t < MAX_SIM_TIME && z > -2) {
+          const v = Math.hypot(vx, vz);
+          const ax = -DRAG_K * v * vx;
+          const az = -GRAVITY - DRAG_K * v * vz;
+
+          vx += ax * SIM_DT;
+          vz += az * SIM_DT;
+          x += vx * SIM_DT;
+          z += vz * SIM_DT;
+          t += SIM_DT;
+
+          const curr = { x, z, vx, vz, t };
+
+          if (!reachedUp && z >= targetHeight) {
+            reachedUp = true;
+          }
+
+          if (reachedUp && z <= targetHeight) {
+            const sample = sampleAtZ(prev, curr, targetHeight);
+            if (sample) {
+              return {
+                reached: true,
+                time: sample.t,
+                x: sample.x,
+                vx: sample.vx,
+                vz: sample.vz,
+              };
+            }
+            break;
+          }
+
+          if (vx <= 0 && !reachedUp) {
+            break;
+          }
+
+          prev = curr;
+        }
+
+        return { reached: false };
+      }
 
       /**
        * 在约束范围内找到最优 Hood 角度
        * 约束: 边缘高度>HUB, 下降阶段, 入射角够陡, 飞轮速度≤最大值
        */
-      function findOptimalHoodAngle(range, deltaH) {
+      function findOptimalHoodAngle(range, deltaH, targetHeight) {
         const STEP = 0.5 * Math.PI / 180;
 
         // 从 state 读取可调参数
@@ -386,65 +645,45 @@
         const minEntryAngle = state.minEntryAngle * Math.PI / 180;
         const maxFlywheelSpeed = state.maxFlywheelSpeed;
 
-        const distToHubEdge = Math.max(range - HUB_HALF_WIDTH, 0.1);
+        const distToHubEdge = Math.max(range - HUB_HALF_WIDTH - BALL_RADIUS, 0.05);
 
         let bestAngle = minHoodAngle;
         let minSpeed = Infinity;
         let foundValid = false;
         let bestEntryAngle = 0;
         let bestHeightAtEdge = 0;
+        let bestTimeOfFlight = 0;
 
         // 备选方案
         let fallbackAngle = minHoodAngle;
         let fallbackSpeed = Infinity;
         let fallbackEntryAngle = 0;
         let fallbackHeightAtEdge = 0;
+        let fallbackTimeOfFlight = 0;
         let fallbackLevel = 0;
 
         for (let angle = minHoodAngle; angle <= maxHoodAngle; angle += STEP) {
-          const tanA = Math.tan(angle);
-          const cosA = Math.cos(angle);
-          const sinA = Math.sin(angle);
-          const denom = range * tanA - deltaH;
+          const solved = solveSpeedForAngle(angle, range, deltaH, distToHubEdge, maxFlywheelSpeed);
+          if (!solved) continue;
+          const speed = solved.speed;
+          const sim = solved.sim;
 
-          if (denom <= 0) continue;
-
-          const speedSq = (GRAVITY * range * range) / (2 * cosA * cosA * denom);
-          const speed = Math.sqrt(speedSq);
-
-          // 飞轮速度约束
-          if (speed > maxFlywheelSpeed) continue;
-
-          const vz0 = speed * sinA;
-          const vHorizontal = speed * cosA;
-
-          // 【关键约束】球到达 HUB 边缘时的高度
-          // t_edge = distToHubEdge / vHorizontal
-          // z(t_edge) = launcherHeight + vz0 * t_edge - 0.5 * g * t_edge²
-          let heightAtEdge = Infinity;
-          let clearsHub = true;
-
-          if (vHorizontal > 0.01) {
-            const t_edge = distToHubEdge / vHorizontal;
-            heightAtEdge = launcherHeight + vz0 * t_edge - 0.5 * GRAVITY * t_edge * t_edge;
-            clearsHub = heightAtEdge > HUB_HEIGHT;
-          }
+          const heightAtEdge = sim.zAtEdge + launcherHeight;
+          const clearsHub = heightAtEdge > targetHeight;
 
           if (!clearsHub) {
-            // 球在到达 HUB 边缘时还没升到足够高，会撞侧面
             if (fallbackLevel < 1 || (fallbackLevel === 1 && speed < fallbackSpeed)) {
               fallbackLevel = 1;
               fallbackSpeed = speed;
               fallbackAngle = angle;
               fallbackHeightAtEdge = heightAtEdge;
               fallbackEntryAngle = 0;
+              fallbackTimeOfFlight = sim.timeAtRange;
             }
             continue;
           }
 
-          const T = range / vHorizontal;
-          const vz_at_target = vz0 - GRAVITY * T;
-          const isDescending = vz_at_target < 0;
+          const isDescending = sim.vzAtRange < 0;
 
           if (!isDescending) {
             if (fallbackLevel < 2 || (fallbackLevel === 2 && speed < fallbackSpeed)) {
@@ -453,11 +692,12 @@
               fallbackAngle = angle;
               fallbackHeightAtEdge = heightAtEdge;
               fallbackEntryAngle = 0;
+              fallbackTimeOfFlight = sim.timeAtRange;
             }
             continue;
           }
 
-          const entryAngleRad = Math.atan2(-vz_at_target, vHorizontal);
+          const entryAngleRad = Math.atan2(-sim.vzAtRange, Math.max(sim.vxAtRange, 0.01));
           const entryAngleDeg = entryAngleRad * 180 / Math.PI;
           const isSteepEnough = entryAngleRad >= minEntryAngle;
 
@@ -468,6 +708,7 @@
               fallbackAngle = angle;
               fallbackHeightAtEdge = heightAtEdge;
               fallbackEntryAngle = entryAngleDeg;
+              fallbackTimeOfFlight = sim.timeAtRange;
             }
             continue;
           }
@@ -478,6 +719,7 @@
             bestAngle = angle;
             bestEntryAngle = entryAngleDeg;
             bestHeightAtEdge = heightAtEdge;
+            bestTimeOfFlight = sim.timeAtRange;
           }
         }
 
@@ -489,7 +731,9 @@
             clearsHub: true,
             isDescending: true,
             isSteepEnough: true,
-            entryAngleDeg: bestEntryAngle
+            entryAngleDeg: bestEntryAngle,
+            timeOfFlight: bestTimeOfFlight,
+            isValid: true
           };
         }
 
@@ -500,22 +744,24 @@
           clearsHub: fallbackLevel >= 2,
           isDescending: fallbackLevel >= 3,
           isSteepEnough: false,
-          entryAngleDeg: fallbackEntryAngle
+          entryAngleDeg: fallbackEntryAngle,
+          timeOfFlight: fallbackTimeOfFlight,
+          isValid: false
         };
       }
 
       /**
        * 生成 HUB 六边形顶点
        */
-      function getHubHexPoints() {
-        const apothem = HUB_OPENING_SIZE / 2;
+      function getHubHexPoints(openingSize, centerX, centerY) {
+        const apothem = openingSize / 2;
         const radius = apothem / Math.cos(Math.PI / 6);
         const points = [];
         for (let i = 0; i < 6; i++) {
           const angle = (i * Math.PI) / 3 - Math.PI / 6;
           points.push({
-            x: HUB_X + radius * Math.cos(angle),
-            y: HUB_Y + radius * Math.sin(angle),
+            x: centerX + radius * Math.cos(angle),
+            y: centerY + radius * Math.sin(angle),
           });
         }
         return points;
@@ -536,20 +782,26 @@
         return inside;
       }
 
-      const hubHexPoints = getHubHexPoints();
+      const SCORING_OPENING_SIZE = Math.max(HUB_OPENING_SIZE - 2 * BALL_RADIUS, 0.1);
 
       /**
        * 核心计算函数：计算射球解决方案
        */
       function computeShootingSolution() {
         const { robotX, robotY, robotVx, robotVy, shootOnMove } = state;
+        const targetX = state.targetX;
+        const targetY = state.targetY;
+        const targetHeight = getTargetHeight();
+        const launcherOffset = getLauncherWorldOffset();
+        const launcherX = robotX + launcherOffset.x;
+        const launcherY = robotY + launcherOffset.y;
 
         // Step 1: 基础几何
-        const dx = HUB_X - robotX;
-        const dy = HUB_Y - robotY;
+        const dx = targetX - launcherX;
+        const dy = targetY - launcherY;
         const range = Math.hypot(dx, dy);
         const goalAngle = Math.atan2(dy, dx);
-        const deltaH = HUB_HEIGHT - state.launcherHeight;
+        const deltaH = targetHeight - (state.launcherHeight + launcherOffset.z);
 
         // Step 2: 分解机器人速度为径向/切向 (借鉴 Team 254)
         const cosG = Math.cos(goalAngle);
@@ -558,7 +810,7 @@
         const tangentialV = -robotVx * sinG + robotVy * cosG; // 垂直于目标方向
 
         // Step 3: 迭代求解
-        let timeOfFlight = 0.5;
+        let timeOfFlight = 0.6;
         let effectiveRange = range;
         let effectiveShotSpeed = range / timeOfFlight;
         let hoodAngle = 60 * Math.PI / 180;
@@ -572,43 +824,28 @@
 
         for (let iter = 0; iter < 3; iter++) {
           // 3.1: 计算有效射程 (如果启用 shoot-on-move)
-          if (shootOnMove && timeOfFlight > 0) {
-            effectiveShotSpeed = range / timeOfFlight - radialV;
-            if (effectiveShotSpeed < 0.1) effectiveShotSpeed = 0.1;
-            effectiveRange = timeOfFlight * Math.hypot(tangentialV, effectiveShotSpeed);
-          } else {
-            effectiveShotSpeed = range / timeOfFlight;
-            effectiveRange = range;
-          }
+        if (shootOnMove && timeOfFlight > 0) {
+          effectiveShotSpeed = range / timeOfFlight - radialV;
+          if (effectiveShotSpeed < 0.1) effectiveShotSpeed = 0.1;
+          effectiveRange = timeOfFlight * Math.hypot(tangentialV, effectiveShotSpeed);
+        } else {
+          effectiveShotSpeed = range / timeOfFlight;
+          effectiveRange = range;
+        }
 
           // 3.2: 找到最优 Hood 角度（带边缘高度+下降+角度约束）
-          const hoodResult = findOptimalHoodAngle(effectiveRange, deltaH);
+          const hoodResult = findOptimalHoodAngle(effectiveRange, deltaH, targetHeight);
           hoodAngle = hoodResult.angle;
+          flywheelSpeed = hoodResult.speed;
           clearsHub = hoodResult.clearsHub;
           heightAtEdge = hoodResult.heightAtEdge;
           isDescending = hoodResult.isDescending;
           isSteepEnough = hoodResult.isSteepEnough;
           entryAngleDeg = hoodResult.entryAngleDeg;
+          timeOfFlight = hoodResult.timeOfFlight;
+          isValid = hoodResult.isValid && Number.isFinite(flywheelSpeed) && flywheelSpeed > 0;
 
-          // 3.3: 计算 flywheelSpeed 和 timeOfFlight
-          const tanH = Math.tan(hoodAngle);
-          const cosH = Math.cos(hoodAngle);
-          const denom = effectiveRange * tanH - deltaH;
-
-          if (denom <= 0) {
-            isValid = false;
-            break;
-          }
-
-          const speedSq = (GRAVITY * effectiveRange * effectiveRange) / (2 * cosH * cosH * denom);
-          flywheelSpeed = Math.sqrt(speedSq);
-
-          // 水平速度分量
-          const vHorizontal = flywheelSpeed * cosH;
-          if (vHorizontal > 0.1) {
-            timeOfFlight = effectiveRange / vHorizontal;
-            isValid = true;
-          } else {
+          if (!isValid || !Number.isFinite(timeOfFlight)) {
             isValid = false;
             break;
           }
@@ -623,8 +860,8 @@
 
         // Step 5: 计算虚拟目标位置 (用于可视化)
         const virtualTarget = {
-          x: HUB_X - robotVx * timeOfFlight * (shootOnMove ? 1 : 0),
-          y: HUB_Y - robotVy * timeOfFlight * (shootOnMove ? 1 : 0),
+          x: targetX - robotVx * timeOfFlight * (shootOnMove ? 1 : 0),
+          y: targetY - robotVy * timeOfFlight * (shootOnMove ? 1 : 0),
         };
 
         // Step 6: 计算实际落点
@@ -639,35 +876,30 @@
         // 球的地面速度
         const ballVx = flywheelVx + robotVx;
         const ballVy = flywheelVy + robotVy;
+        const ballSpeedHorizontal = Math.hypot(ballVx, ballVy);
 
-        // 计算落到 HUB 高度的时间
-        // z(t) = LAUNCHER_HEIGHT + vz*t - 0.5*g*t² = HUB_HEIGHT
-        // 0.5*g*t² - vz*t + (HUB_HEIGHT - LAUNCHER_HEIGHT) = 0
-        const a = 0.5 * GRAVITY;
-        const b = -vz;
-        const c = deltaH;
-        const discriminant = b * b - 4 * a * c;
-
-        let impactPoint = { x: HUB_X, y: HUB_Y };
+        let impactPoint = { x: targetX, y: targetY };
         let actualToF = timeOfFlight;
 
-        if (isValid && discriminant >= 0) {
-          const sqrtD = Math.sqrt(discriminant);
-          const t1 = (-b - sqrtD) / (2 * a);
-          const t2 = (-b + sqrtD) / (2 * a);
-          actualToF = t2 > 0 ? t2 : t1; // 取下降阶段的解
-
-          if (actualToF > 0) {
+        if (isValid && ballSpeedHorizontal > 0.01) {
+          const flight = simulateShotToHeight(ballSpeedHorizontal, vz, deltaH);
+          if (flight.reached) {
+            actualToF = flight.time;
+            const dirX = ballVx / ballSpeedHorizontal;
+            const dirY = ballVy / ballSpeedHorizontal;
             impactPoint = {
-              x: robotX + ballVx * actualToF,
-              y: robotY + ballVy * actualToF,
+              x: launcherX + dirX * flight.x,
+              y: launcherY + dirY * flight.x,
             };
+          } else {
+            isValid = false;
           }
         } else {
           isValid = false;
         }
 
         // 最终判定：必须有效 + 顶点够高 + 下降 + 角度够陡 + 落入目标区域
+        const hubHexPoints = getHubHexPoints(SCORING_OPENING_SIZE, targetX, targetY);
         const inTarget = pointInPolygon(impactPoint, hubHexPoints);
         const isOnTarget = isValid && clearsHub && isDescending && isSteepEnough && inTarget;
 
@@ -692,6 +924,9 @@
           inTarget,        // 落点是否在 HUB 开口内
           isOnTarget,      // 综合判定
           goalAngle,
+          launcherX,
+          launcherY,
+          launcherZ: state.launcherHeight + launcherOffset.z,
           // 轨迹绘制用
           ballVx, ballVy, vz,
         };
@@ -704,100 +939,230 @@
 
       const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
       camera.position.set(-1, 6, 4.035);
-      camera.lookAt(HUB_X, 1.5, HUB_Y);
+      camera.lookAt(DEFAULT_TARGET_X, 1.5, DEFAULT_TARGET_Y);
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.shadowMap.enabled = true;
+      renderer.physicallyCorrectLights = false;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.NoToneMapping;
       container.appendChild(renderer.domElement);
 
       const orbitControls = new OrbitControls(camera, renderer.domElement);
-      orbitControls.target.set(HUB_X, 1, HUB_Y);
+      orbitControls.target.set(DEFAULT_TARGET_X, 1, DEFAULT_TARGET_Y);
       orbitControls.enableDamping = true;
       orbitControls.dampingFactor = 0.05;
       orbitControls.update();
+      let lastTargetX = state.targetX;
+      let lastTargetY = state.targetY;
 
       // 光照
       scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x2c3e50, 0.5));
       const dirLight = new THREE.DirectionalLight(0xffffff, 1);
       dirLight.position.set(10, 20, 10);
       dirLight.castShadow = true;
       scene.add(dirLight);
 
-      // 场地地面
-      const fieldGeo = new THREE.PlaneGeometry(FIELD_LENGTH, FIELD_WIDTH);
-      const fieldMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.8 });
-      const fieldMesh = new THREE.Mesh(fieldGeo, fieldMat);
-      fieldMesh.rotation.x = -Math.PI / 2;
-      fieldMesh.position.set(FIELD_LENGTH / 2, 0, FIELD_WIDTH / 2);
-      fieldMesh.receiveShadow = true;
-      scene.add(fieldMesh);
+      // 场地模型
+      const fieldGroup = new THREE.Group();
+      scene.add(fieldGroup);
 
-      // Alliance Zone
-      const azGeo = new THREE.PlaneGeometry(4.03, FIELD_WIDTH);
-      const azMat = new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.15 });
-      const azMesh = new THREE.Mesh(azGeo, azMat);
-      azMesh.rotation.x = -Math.PI / 2;
-      azMesh.position.set(4.03 / 2, 0.01, FIELD_WIDTH / 2);
-      scene.add(azMesh);
+      const gltfLoader = new GLTFLoader();
+      const robotConfigPromise = fetch("assets/Robot_2026FRCKitBotV1/config.json")
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+      const fallbackRobotConfig = {
+        rotations: [
+          { axis: "x", degrees: 90 },
+          { axis: "z", degrees: 90 },
+        ],
+        position: [-0.3, 0, 0.05],
+      };
 
-      // 网格
-      const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
-      gridHelper.position.set(FIELD_LENGTH / 2, 0.02, FIELD_WIDTH / 2);
-      scene.add(gridHelper);
-
-      // HUB 底座
-      const hubBaseGeo = new THREE.BoxGeometry(HUB_BASE_SIZE, 1.0, HUB_BASE_SIZE);
-      const hubBaseMat = new THREE.MeshStandardMaterial({ color: 0x3d5a80, transparent: true, opacity: 0.6 });
-      const hubBaseMesh = new THREE.Mesh(hubBaseGeo, hubBaseMat);
-      hubBaseMesh.position.set(HUB_X, 0.5, HUB_Y);
-      hubBaseMesh.castShadow = true;
-      scene.add(hubBaseMesh);
-
-      // HUB 六边形开口
-      const hexShape = new THREE.Shape();
-      const hexRadius = (HUB_OPENING_SIZE / 2) / Math.cos(Math.PI / 6);
-      for (let i = 0; i < 6; i++) {
-        const angle = (i * Math.PI) / 3 - Math.PI / 6;
-        const x = hexRadius * Math.cos(angle);
-        const y = hexRadius * Math.sin(angle);
-        if (i === 0) hexShape.moveTo(x, y);
-        else hexShape.lineTo(x, y);
+      function applyConfigRotations(object, rotations) {
+        if (!Array.isArray(rotations)) return;
+        rotations.forEach((rot) => {
+          const axis = rot.axis;
+          const radians = THREE.MathUtils.degToRad(rot.degrees || 0);
+          if (axis === "x") object.rotateX(radians);
+          if (axis === "y") object.rotateY(radians);
+          if (axis === "z") object.rotateZ(radians);
+        });
       }
-      hexShape.closePath();
-      const hexGeo = new THREE.ShapeGeometry(hexShape);
-      const hexMat = new THREE.MeshBasicMaterial({ color: 0x2a9d8f, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
-      const hexMesh = new THREE.Mesh(hexGeo, hexMat);
-      hexMesh.rotation.x = -Math.PI / 2;
-      hexMesh.position.set(HUB_X, HUB_HEIGHT, HUB_Y);
-      scene.add(hexMesh);
 
-      // HUB 开口边框
-      const hexEdgeGeo = new THREE.EdgesGeometry(hexGeo);
-      const hexEdgeMat = new THREE.LineBasicMaterial({ color: 0x2a9d8f, linewidth: 2 });
-      const hexEdgeLine = new THREE.LineSegments(hexEdgeGeo, hexEdgeMat);
-      hexEdgeLine.rotation.x = -Math.PI / 2;
-      hexEdgeLine.position.set(HUB_X, HUB_HEIGHT, HUB_Y);
-      scene.add(hexEdgeLine);
+      function simplifyMaterial(material) {
+        const lambert = new THREE.MeshLambertMaterial({
+          color: material?.color ? material.color.clone() : new THREE.Color(0xffffff),
+          map: material?.map || null,
+          transparent: material?.transparent || false,
+          opacity: material?.opacity ?? 1,
+          side: material?.side ?? THREE.FrontSide,
+        });
+        if (material?.emissive) lambert.emissive.copy(material.emissive);
+        if (material?.emissiveMap) lambert.emissiveMap = material.emissiveMap;
+        if (typeof material?.alphaTest === "number") lambert.alphaTest = material.alphaTest;
+        lambert.depthWrite = material?.depthWrite ?? true;
+        lambert.depthTest = material?.depthTest ?? true;
+        return lambert;
+      }
 
-      // HUB 柱体
-      const pillarGeo = new THREE.CylinderGeometry(0.05, 0.05, HUB_HEIGHT - 1.0, 8);
-      const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3d5a80 });
-      [[HUB_BASE_SIZE/2, HUB_BASE_SIZE/2], [-HUB_BASE_SIZE/2, HUB_BASE_SIZE/2],
-       [-HUB_BASE_SIZE/2, -HUB_BASE_SIZE/2], [HUB_BASE_SIZE/2, -HUB_BASE_SIZE/2]].forEach(([px, pz]) => {
-        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-        pillar.position.set(HUB_X + px, 1.0 + (HUB_HEIGHT - 1.0) / 2, HUB_Y + pz);
-        scene.add(pillar);
-      });
+      function simplifyMeshMaterials(mesh) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material = mesh.material.map((mat) => simplifyMaterial(mat));
+        } else if (mesh.material) {
+          mesh.material = simplifyMaterial(mesh.material);
+        }
+      }
+
+      gltfLoader.load(
+        "assets/Field3d_2026FRCFieldV1/model.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.rotation.set(0, 0, 0);
+
+          const initialBox = new THREE.Box3().setFromObject(model);
+          const initialSize = new THREE.Vector3();
+          initialBox.getSize(initialSize);
+
+          const axes = [
+            { axis: 0, size: initialSize.x },
+            { axis: 1, size: initialSize.y },
+            { axis: 2, size: initialSize.z },
+          ].sort((a, b) => b.size - a.size);
+
+          const lengthAxis = axes[0].axis;
+          const widthAxis = axes[1].axis;
+          const heightAxis = axes[2].axis;
+
+          const basis = [null, null, null];
+          basis[lengthAxis] = new THREE.Vector3(1, 0, 0);
+          basis[widthAxis] = new THREE.Vector3(0, 0, 1);
+          basis[heightAxis] = new THREE.Vector3(0, 1, 0);
+
+          const rotMatrix = new THREE.Matrix4().makeBasis(basis[0], basis[1], basis[2]);
+          if (rotMatrix.determinant() < 0) {
+            basis[widthAxis].multiplyScalar(-1);
+            rotMatrix.makeBasis(basis[0], basis[1], basis[2]);
+          }
+          model.setRotationFromMatrix(rotMatrix);
+
+          const box = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+
+          const scaleX = FIELD_LENGTH / size.x;
+          const scaleZ = FIELD_WIDTH / size.z;
+          const scale = Math.min(scaleX, scaleZ);
+          model.scale.setScalar(scale);
+
+          const scaledBox = new THREE.Box3().setFromObject(model);
+          model.position.set(
+            model.position.x - scaledBox.min.x,
+            model.position.y - scaledBox.min.y,
+            model.position.z - scaledBox.min.z
+          );
+
+          model.traverse((child) => {
+            if (child.isMesh) {
+              simplifyMeshMaterials(child);
+              child.castShadow = false;
+              child.receiveShadow = true;
+            }
+          });
+
+          fieldGroup.add(model);
+        },
+        undefined,
+        (error) => {
+          console.warn("Failed to load field model", error);
+        }
+      );
+
+      // 燃料模型
+      let fuelTemplate = null;
+      gltfLoader.load(
+        "assets/Field3d_2026FRCFieldV1/model_0.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = maxDim > 0 ? BALL_DIAMETER / maxDim : 1;
+          model.scale.setScalar(scale);
+          const scaledBox = new THREE.Box3().setFromObject(model);
+          const center = new THREE.Vector3();
+          scaledBox.getCenter(center);
+          model.position.sub(center);
+          model.traverse((child) => {
+            if (child.isMesh) {
+              simplifyMeshMaterials(child);
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          fuelTemplate = model;
+        },
+        undefined,
+        (error) => {
+          console.warn("Failed to load fuel model", error);
+        }
+      );
 
       // 机器人
+      const ROBOT_HEADING_OFFSET = 0;
+      const ROBOT_MODEL_YAW_OFFSET = 0;
+      const ROBOT_MODEL_PITCH_OFFSET = -Math.PI / 2;
+      const ROBOT_MODEL_ROLL_OFFSET = 0;
       const robotGroup = new THREE.Group();
-      const robotGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
-      const robotMat = new THREE.MeshStandardMaterial({ color: 0x1b1f24 });
-      const robotMesh = new THREE.Mesh(robotGeo, robotMat);
-      robotMesh.castShadow = true;
-      robotGroup.add(robotMesh);
+      const robotVisual = new THREE.Group();
+      robotGroup.add(robotVisual);
+      scene.add(robotGroup);
+      robotVisual.rotation.y = ROBOT_MODEL_YAW_OFFSET;
+
+      gltfLoader.load(
+        "assets/Robot_2026FRCKitBotV1/model.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          robotConfigPromise.then((config) => {
+            const resolvedConfig = config || fallbackRobotConfig;
+            model.rotation.set(0, 0, 0);
+            applyConfigRotations(model, resolvedConfig.rotations);
+            model.rotateX(ROBOT_MODEL_PITCH_OFFSET);
+            model.rotateZ(ROBOT_MODEL_ROLL_OFFSET);
+
+            const box = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+            model.position.y -= box.min.y;
+
+            if (Array.isArray(resolvedConfig.position)) {
+              model.position.x += resolvedConfig.position[0] || 0;
+              model.position.y += resolvedConfig.position[1] || 0;
+              model.position.z += resolvedConfig.position[2] || 0;
+            }
+
+            model.traverse((child) => {
+              if (child.isMesh) {
+                simplifyMeshMaterials(child);
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+
+            robotVisual.add(model);
+          });
+        },
+        undefined,
+        (error) => {
+          console.warn("Failed to load robot model", error);
+        }
+      );
 
       // 方向箭头
       const arrowShape = new THREE.Shape();
@@ -809,9 +1174,8 @@
       const arrowMat = new THREE.MeshBasicMaterial({ color: 0xee6c4d, side: THREE.DoubleSide });
       const directionArrow = new THREE.Mesh(arrowGeo, arrowMat);
       directionArrow.rotation.x = -Math.PI / 2;
-      directionArrow.position.y = 0.16;
+      directionArrow.position.y = 0.35;
       robotGroup.add(directionArrow);
-      scene.add(robotGroup);
 
       // 速度箭头
       const velocityArrow = new THREE.ArrowHelper(
@@ -844,11 +1208,127 @@
       const vtLine = new THREE.Line(vtLineGeo, vtLineMat);
       scene.add(vtLine);
 
+      // 目标射击点
+      const targetMarkerGeo = new THREE.RingGeometry(0.14, 0.2, 32);
+      const targetMarkerMat = new THREE.MeshBasicMaterial({
+        color: 0x00b4d8,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.7
+      });
+      const targetMarker = new THREE.Mesh(targetMarkerGeo, targetMarkerMat);
+      targetMarker.rotation.x = -Math.PI / 2;
+      scene.add(targetMarker);
+
       // 落点
-      const impactGeo = new THREE.SphereGeometry(0.1, 16, 16);
+      const impactGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
       const impactMat = new THREE.MeshBasicMaterial({ color: 0x2a9d8f, transparent: true, opacity: 0.9 });
       const impactMesh = new THREE.Mesh(impactGeo, impactMat);
       scene.add(impactMesh);
+
+      // 连续射球
+      const shotsGroup = new THREE.Group();
+      scene.add(shotsGroup);
+      const shotGeo = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
+      const baseShotMaterial = new THREE.MeshLambertMaterial({
+        color: 0xffb703,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      const shots = [];
+      let shotTimer = 0;
+
+      function buildFuelShot() {
+        if (!fuelTemplate) {
+          const mesh = new THREE.Mesh(shotGeo, baseShotMaterial.clone());
+          return { object: mesh, materials: [mesh.material] };
+        }
+
+        const shot = fuelTemplate.clone(true);
+        const materials = [];
+        shot.traverse((child) => {
+          if (child.isMesh) {
+            child.material = child.material.clone();
+            child.material.transparent = true;
+            child.castShadow = true;
+            child.receiveShadow = true;
+            materials.push(child.material);
+          }
+        });
+        return { object: shot, materials };
+      }
+
+      function spawnShot(solution) {
+        const shotData = buildFuelShot();
+        const shot = shotData.object;
+        const x = solution.launcherX;
+        const y = solution.launcherY;
+        const z = solution.launcherZ;
+        shot.position.set(x, z, y);
+        shotsGroup.add(shot);
+
+        shots.push({
+          object: shot,
+          materials: shotData.materials,
+          x,
+          y,
+          z,
+          vx: solution.ballVx,
+          vy: solution.ballVy,
+          vz: solution.vz,
+          age: 0
+        });
+
+        if (shots.length > MAX_SHOTS) {
+          const old = shots.shift();
+          shotsGroup.remove(old.object);
+          old.materials.forEach((mat) => mat.dispose());
+        }
+      }
+
+      function updateShots(dt, solution) {
+        const targetHeight = getTargetHeight();
+        if (solution && solution.isValid) {
+          shotTimer += dt;
+          if (shotTimer >= SHOT_INTERVAL) {
+            spawnShot(solution);
+            shotTimer = 0;
+          }
+        } else {
+          shotTimer = 0;
+        }
+
+        for (let i = shots.length - 1; i >= 0; i--) {
+          const shot = shots[i];
+          shot.age += dt;
+
+          const speed = Math.hypot(shot.vx, shot.vy, shot.vz);
+          const ax = -DRAG_K * speed * shot.vx;
+          const ay = -DRAG_K * speed * shot.vy;
+          const az = -GRAVITY - DRAG_K * speed * shot.vz;
+
+          shot.vx += ax * dt;
+          shot.vy += ay * dt;
+          shot.vz += az * dt;
+
+          shot.x += shot.vx * dt;
+          shot.y += shot.vy * dt;
+          shot.z += shot.vz * dt;
+
+          shot.object.position.set(shot.x, shot.z, shot.y);
+          const opacity = Math.max(0, 0.95 - shot.age / SHOT_LIFETIME);
+          shot.materials.forEach((mat) => {
+            mat.opacity = opacity;
+          });
+
+          if ((shot.vz < 0 && shot.z <= targetHeight) || shot.z < BALL_RADIUS || shot.age > SHOT_LIFETIME) {
+            shotsGroup.remove(shot.object);
+            shot.materials.forEach((mat) => mat.dispose());
+            shots.splice(i, 1);
+          }
+        }
+      }
 
       // 弹道轨迹
       let trajectoryLine = null;
@@ -863,16 +1343,45 @@
         if (!solution.isValid) return;
 
         const points = [];
-        const steps = 60;
-        const { ballVx, ballVy, vz, timeOfFlight } = solution;
+        const { ballVx, ballVy, vz } = solution;
+        let x = solution.launcherX;
+        let y = solution.launcherY;
+        let z = solution.launcherZ;
+        let vx = ballVx;
+        let vy = ballVy;
+        let vzCurr = vz;
+        const targetHeight = getTargetHeight();
 
-        for (let i = 0; i <= steps; i++) {
-          const t = (i / steps) * timeOfFlight * 1.1;
-          const x = state.robotX + ballVx * t;
-          const y = state.robotY + ballVy * t;
-          const z = state.launcherHeight + vz * t - 0.5 * GRAVITY * t * t;
-          if (z < 0) break;
+        for (let t = 0; t < TRAJ_MAX_TIME; t += TRAJ_DT) {
           points.push(new THREE.Vector3(x, z, y));
+
+          const prevX = x;
+          const prevY = y;
+          const prevZ = z;
+
+          const speed = Math.hypot(vx, vy, vzCurr);
+          const ax = -DRAG_K * speed * vx;
+          const ay = -DRAG_K * speed * vy;
+          const az = -GRAVITY - DRAG_K * speed * vzCurr;
+
+          vx += ax * TRAJ_DT;
+          vy += ay * TRAJ_DT;
+          vzCurr += az * TRAJ_DT;
+
+          x += vx * TRAJ_DT;
+          y += vy * TRAJ_DT;
+          z += vzCurr * TRAJ_DT;
+
+          if (vzCurr < 0 && z <= targetHeight) {
+            const dz = z - prevZ;
+            const ratio = dz !== 0 ? (targetHeight - prevZ) / dz : 0;
+            const ix = prevX + (x - prevX) * ratio;
+            const iy = prevY + (y - prevY) * ratio;
+            points.push(new THREE.Vector3(ix, targetHeight, iy));
+            break;
+          }
+
+          if (z < BALL_RADIUS) break;
         }
 
         if (points.length < 2) return;
@@ -885,6 +1394,14 @@
 
       // ===== 场景更新函数 =====
       function updateScene(solution) {
+        const targetHeight = getTargetHeight();
+
+        if (state.targetX !== lastTargetX || state.targetY !== lastTargetY) {
+          orbitControls.target.set(state.targetX, 1, state.targetY);
+          lastTargetX = state.targetX;
+          lastTargetY = state.targetY;
+        }
+
         // 更新指标
         metrics.range.textContent = solution.range.toFixed(2);
         metrics.flywheel.textContent = solution.isValid ? solution.flywheelSpeed.toFixed(1) : "---";
@@ -896,13 +1413,9 @@
         metrics.onTarget.classList.toggle("ok", isOk);
         metrics.onTarget.classList.toggle("warn", !isOk);
 
-        // 更新 HUB 颜色
-        hexMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
-        hexEdgeMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
-
         // 机器人位置和朝向
-        robotGroup.position.set(state.robotX, 0.15, state.robotY);
-        robotGroup.rotation.y = -state.chassisHeading;
+        robotGroup.position.set(state.robotX, 0, state.robotY);
+        robotGroup.rotation.y = -state.chassisHeading + ROBOT_HEADING_OFFSET;
 
         // 速度箭头
         const speed = Math.hypot(state.robotVx, state.robotVy);
@@ -917,32 +1430,30 @@
 
         // 静止参考线
         refLineGeo.setFromPoints([
-          new THREE.Vector3(state.robotX, state.launcherHeight, state.robotY),
-          new THREE.Vector3(HUB_X, HUB_HEIGHT, HUB_Y),
+          new THREE.Vector3(solution.launcherX, solution.launcherZ, solution.launcherY),
+          new THREE.Vector3(state.targetX, targetHeight, state.targetY),
         ]);
         refLine.computeLineDistances();
 
         // 瞄准线
-        const aimLength = Math.max(solution.range * 1.2, 5);
         aimLineGeo.setFromPoints([
-          new THREE.Vector3(state.robotX, state.launcherHeight, state.robotY),
-          new THREE.Vector3(
-            state.robotX + Math.cos(solution.chassisHeading) * aimLength,
-            HUB_HEIGHT,
-            state.robotY + Math.sin(solution.chassisHeading) * aimLength
-          ),
+          new THREE.Vector3(solution.launcherX, solution.launcherZ, solution.launcherY),
+          new THREE.Vector3(state.targetX, targetHeight, state.targetY),
         ]);
 
         // 虚拟目标
         vtMesh.position.set(solution.virtualTarget.x, 0.02, solution.virtualTarget.y);
         vtLineGeo.setFromPoints([
           new THREE.Vector3(solution.virtualTarget.x, 0.02, solution.virtualTarget.y),
-          new THREE.Vector3(solution.virtualTarget.x, HUB_HEIGHT, solution.virtualTarget.y),
+          new THREE.Vector3(solution.virtualTarget.x, targetHeight, solution.virtualTarget.y),
         ]);
         vtLine.computeLineDistances();
 
+        // 目标射击点
+        targetMarker.position.set(state.targetX, targetHeight, state.targetY);
+
         // 落点
-        impactMesh.position.set(solution.impactPoint.x, HUB_HEIGHT, solution.impactPoint.y);
+        impactMesh.position.set(solution.impactPoint.x, targetHeight, solution.impactPoint.y);
         impactMat.color.setHex(solution.isOnTarget ? 0x2a9d8f : 0xc1121f);
 
         // 弹道轨迹
@@ -976,8 +1487,19 @@
         control.number.value = value.toFixed(2);
       }
 
+      function setControlValue(key, value) {
+        state[key] = value;
+        updateControl(key, value);
+      }
+
       document.getElementById("shootOnMove").addEventListener("change", (e) => {
         state.shootOnMove = e.target.checked;
+      });
+
+      document.getElementById("resetTarget").addEventListener("click", () => {
+        setControlValue("targetX", DEFAULT_TARGET_X);
+        setControlValue("targetY", DEFAULT_TARGET_Y);
+        setControlValue("targetZ", DEFAULT_TARGET_HEIGHT);
       });
 
       // ===== 键盘控制 =====
@@ -1006,6 +1528,9 @@
 
       // ===== 游戏循环 =====
       let lastTime = performance.now();
+      const SOLVER_INTERVAL = 1 / 30;
+      let solverAccumulator = 0;
+      let cachedSolution = null;
 
       function gameLoop() {
         const now = performance.now();
@@ -1059,7 +1584,12 @@
         state.robotY = Math.max(0.3, Math.min(FIELD_WIDTH - 0.3, state.robotY));
 
         // 计算射球解决方案
-        const solution = computeShootingSolution();
+        solverAccumulator += dt;
+        if (!cachedSolution || solverAccumulator >= SOLVER_INTERVAL) {
+          cachedSolution = computeShootingSolution();
+          solverAccumulator = 0;
+        }
+        const solution = cachedSolution;
 
         // 自动追踪：底盘朝向跟随 chassisHeading
         const targetHeading = solution.chassisHeading;
@@ -1077,6 +1607,7 @@
         updateControl("robotY", state.robotY);
 
         updateScene(solution);
+        updateShots(dt, solution);
       }
 
       // ===== 动画循环 =====
