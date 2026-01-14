@@ -1,6 +1,8 @@
 # GOATSim Shooting 模拟器 for REBUILT
 
-面向 FRC 2026 REBUILT 赛季的射球可视化工具，用物理模型模拟动态射球补偿。
+[![Chief Delphi Thread](https://img.shields.io/badge/Chief%20Delphi-Thread-0b7285?logo=discourse&logoColor=white)](https://www.chiefdelphi.com/t/goatsim-interactive-shoot-on-move-solver-and-fuel-collision-demo/)
+
+面向 FRC 2026赛季 REBUILT 的射球可视化工具，用物理模型模拟动态射球补偿。
 
 [English Version](README.md)
 

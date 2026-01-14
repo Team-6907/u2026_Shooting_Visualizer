@@ -1,6 +1,8 @@
 # GOATSim Shooting Simulator for REBUILT
 
-GOATSim shooting simulator for the FRC 2026 REBUILT season, with physics-based shoot-on-move simulation.
+[![Chief Delphi Thread](https://img.shields.io/badge/Chief%20Delphi-Thread-0b7285?logo=discourse&logoColor=white)](https://www.chiefdelphi.com/t/goatsim-interactive-shoot-on-move-solver-and-fuel-collision-demo/511490)
+
+GOATSim shooting simulator for the FRC 2026 Season, REBUILT, with physics-based shoot-on-move simulation.
 
 [中文版本](README.zh.md)
 
