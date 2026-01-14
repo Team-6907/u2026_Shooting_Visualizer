@@ -1,6 +1,6 @@
-# GOATSim-Shooting (Rebuilt)
+# GOATSim Shooting Simulator for REBUILT
 
-Quick-start shooting visualizer for FRC 2026 Rebuilt with physics-based shoot-on-move simulation.
+GOATSim shooting simulator for the FRC 2026 REBUILT season, with physics-based shoot-on-move simulation.
 
 [中文版本](README.zh.md)
 

@@ -1,6 +1,6 @@
-# GOATSim-Shooting (Rebuilt)
+# GOATSim Shooting 模拟器 for REBUILT
 
-面向 FRC 2026 Rebuilt 的射球可视化工具，用物理模型模拟动态射球补偿。
+面向 FRC 2026 REBUILT 赛季的射球可视化工具，用物理模型模拟动态射球补偿。
 
 [English Version](README.md)
 
