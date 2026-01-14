@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -19,24 +19,36 @@
         <div class="hud">
           <h3>GOATSim</h3>
           <div class="keys">
-            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 <kbd>Space</kbd> 停
+            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+            <span data-i18n="hudMove">移动</span>
+            <kbd>Space</kbd>
+            <span data-i18n="hudStop">停</span>
           </div>
           <div class="hud-legend">
-            <span class="legend-aim">─</span> 瞄准
-            <span class="legend-virtual">●</span> 虚拟目标
-            <span class="legend-impact">●</span> 落点<br />
-            <span class="legend-trajectory">⌒</span> 弹道
-            <span class="legend-velocity">→</span> 速度
+            <span class="legend-aim">─</span> <span data-i18n="legendAim">瞄准</span>
+            <span class="legend-virtual">●</span> <span data-i18n="legendVirtual">虚拟目标</span>
+            <span class="legend-impact">●</span> <span data-i18n="legendImpact">落点</span><br />
+            <span class="legend-trajectory">⌒</span> <span data-i18n="legendTrajectory">弹道</span>
+            <span class="legend-velocity">→</span> <span data-i18n="legendVelocity">速度</span>
           </div>
         </div>
-        <div class="camera-hint">拖拽旋转 · 滚轮缩放 · 点击启用键盘</div>
+        <div class="camera-hint" data-i18n="cameraHint">拖拽旋转 · 滚轮缩放 · 点击启用键盘</div>
       </div>
 
       <aside class="controls-panel">
-        <h2>控制</h2>
+        <div class="controls-header">
+          <h2 data-i18n="controlsTitle">控制</h2>
+          <div class="language-switch">
+            <label for="langSelect" data-i18n="language">语言</label>
+            <select id="langSelect">
+              <option value="zh">中文</option>
+              <option value="en">EN</option>
+            </select>
+          </div>
+        </div>
 
         <div class="control-group">
-          <label>位置 X/Y (m)</label>
+          <label data-i18n="positionXY">位置 X/Y (m)</label>
           <div class="control-row" data-key="robotX">
             <input type="range" min="0" max="16.54" step="0.01" value="3.44" />
             <input type="number" step="0.01" value="3.44" />
@@ -48,7 +60,7 @@
         </div>
 
         <div class="control-group">
-          <label>最大速度 (m/s)</label>
+          <label data-i18n="maxSpeed">最大速度 (m/s)</label>
           <div class="control-row" data-key="maxLinearSpeed">
             <input type="range" min="0.5" max="6.86" step="0.1" value="2.0" />
             <input type="number" step="0.1" value="2.0" />
@@ -56,7 +68,7 @@
         </div>
 
         <div class="control-group">
-          <label>最大加速度 (m/s²)</label>
+          <label data-i18n="maxAccel">最大加速度 (m/s²)</label>
           <div class="control-row" data-key="maxAcceleration">
             <input type="range" min="0.5" max="6.87" step="0.1" value="3.0" />
             <input type="number" step="0.1" value="3.0" />
@@ -66,50 +78,50 @@
         <div class="control-group">
           <label class="toggle">
             <input type="checkbox" id="shootOnMove" checked />
-            动态补偿
+            <span data-i18n="shootOnMove">动态补偿</span>
           </label>
         </div>
 
         <div class="control-group control-group--section">
-          <label class="section-title">⚙️ 机构参数</label>
+          <label class="section-title" data-i18n="mechanismSection">⚙️ 机构参数</label>
 
-          <label>Hood 最小角 (°)</label>
+          <label data-i18n="minHoodAngle">Hood 最小角 (°)</label>
           <div class="control-row" data-key="minHoodAngle">
             <input type="range" min="20" max="80" step="1" value="45" />
             <input type="number" step="1" value="45" />
           </div>
 
-          <label>Hood 最大角 (°)</label>
+          <label data-i18n="maxHoodAngle">Hood 最大角 (°)</label>
           <div class="control-row" data-key="maxHoodAngle">
             <input type="range" min="50" max="90" step="1" value="90" />
             <input type="number" step="1" value="90" />
           </div>
 
-          <label>最小入射角 (°)</label>
+          <label data-i18n="minEntryAngle">最小入射角 (°)</label>
           <div class="control-row" data-key="minEntryAngle">
             <input type="range" min="15" max="60" step="5" value="45" />
             <input type="number" step="5" value="45" />
           </div>
 
-          <label>飞轮最高速 (m/s)</label>
+          <label data-i18n="maxFlywheelSpeed">飞轮最高速 (m/s)</label>
           <div class="control-row" data-key="maxFlywheelSpeed">
             <input type="range" min="10" max="45" step="1" value="25" />
             <input type="number" step="1" value="25" />
           </div>
 
-          <label>发射口偏移 X (m)</label>
+          <label data-i18n="launcherOffsetX">发射口偏移 X (m)</label>
           <div class="control-row" data-key="launcherOffsetX">
             <input type="range" min="-1.0" max="1.0" step="0.01" value="-0.53" />
             <input type="number" step="0.01" value="-0.53" />
           </div>
 
-          <label>发射口偏移 Y (m)</label>
+          <label data-i18n="launcherOffsetY">发射口偏移 Y (m)</label>
           <div class="control-row" data-key="launcherOffsetY">
             <input type="range" min="-1.0" max="1.0" step="0.01" value="0.05" />
             <input type="number" step="0.01" value="0.05" />
           </div>
 
-          <label>发射口高度 Z (m)</label>
+          <label data-i18n="launcherOffsetZ">发射口高度 Z (m)</label>
           <div class="control-row" data-key="launcherOffsetZ">
             <input type="range" min="0.0" max="1.5" step="0.01" value="0.53" />
             <input type="number" step="0.01" value="0.53" />
@@ -117,66 +129,70 @@
         </div>
 
         <div class="control-group">
-          <label class="section-title">🎯 散度参数</label>
+          <label class="section-title" data-i18n="dispersionSection">🎯 散度参数</label>
 
-          <label>散度基线 (m)</label>
+          <label data-i18n="dispersionBase">散度基线 (m)</label>
           <div class="control-row" data-key="dispersionBase">
             <input type="range" min="0" max="0.3" step="0.01" value="0.05" />
             <input type="number" step="0.01" value="0.05" />
           </div>
 
-          <label>距离增益 (m/m)</label>
+          <label data-i18n="dispersionPerMeter">距离增益 (m/m)</label>
           <div class="control-row" data-key="dispersionPerMeter">
             <input type="range" min="0" max="0.1" step="0.005" value="0.02" />
             <input type="number" step="0.005" value="0.02" />
           </div>
 
-          <div class="helper">散度 ≈ 基线 + 距离增益 × 距离</div>
+          <div class="helper" data-i18n="dispersionHelper">散度 ≈ 基线 + 距离增益 × 距离</div>
         </div>
 
         <div class="control-group">
-          <label class="section-title section-title--target">🎯 目标射击点 (m)</label>
+          <label class="section-title section-title--target" data-i18n="targetSection">
+            🎯 目标射击点 (m)
+          </label>
 
-          <label>目标 X</label>
+          <label data-i18n="targetX">目标 X</label>
           <div class="control-row" data-key="targetX">
             <input type="range" min="0" max="16.54" step="0.01" value="5.58" />
             <input type="number" step="0.01" value="5.58" />
           </div>
 
-          <label>目标 Y</label>
+          <label data-i18n="targetY">目标 Y</label>
           <div class="control-row" data-key="targetY">
             <input type="range" min="0" max="8.07" step="0.01" value="3.35" />
             <input type="number" step="0.01" value="3.35" />
           </div>
 
-          <label>目标 Z</label>
+          <label data-i18n="targetZ">目标 Z</label>
           <div class="control-row" data-key="targetZ">
             <input type="range" min="0" max="3.0" step="0.01" value="1.23" />
             <input type="number" step="0.01" value="1.23" />
           </div>
 
-          <button class="reset-button" id="resetTarget" type="button">恢复默认</button>
+          <button class="reset-button" id="resetTarget" type="button" data-i18n="resetTarget">
+            恢复默认
+          </button>
         </div>
 
         <div class="metrics">
           <div class="metric">
-            <div class="label">距离</div>
+            <div class="label" data-i18n="metricRange">距离</div>
             <div class="value" id="metricRange">0.00</div>
           </div>
           <div class="metric">
-            <div class="label">飞轮</div>
+            <div class="label" data-i18n="metricFlywheel">飞轮</div>
             <div class="value" id="metricFlywheel">0.0</div>
           </div>
           <div class="metric">
-            <div class="label">Hood</div>
+            <div class="label" data-i18n="metricHood">Hood</div>
             <div class="value" id="metricHood">0.0</div>
           </div>
           <div class="metric">
-            <div class="label">入射角</div>
+            <div class="label" data-i18n="metricEntry">入射角</div>
             <div class="value" id="metricEntry">0.0</div>
           </div>
           <div class="metric">
-            <div class="label">命中</div>
+            <div class="label" data-i18n="metricOnTarget">命中</div>
             <div class="value" id="metricOnTarget">否</div>
           </div>
         </div>

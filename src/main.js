@@ -6,6 +6,7 @@ import { computeShootingSolution } from "./core/solver.js";
 import { bindKeyboard } from "./input/keyboard.js";
 import { createScene } from "./scene/scene.js";
 import { initControls } from "./ui/controls.js";
+import { initI18n } from "./ui/i18n.js";
 import { initMetrics } from "./ui/metrics.js";
 import { initRapier } from "./physics/rapier.js";
 
@@ -25,8 +26,9 @@ if (!container) {
 
 const state = createState();
 const keys = createKeys();
+const i18n = initI18n(state);
 const controls = initControls(state);
-const metrics = initMetrics();
+const metrics = initMetrics(i18n);
 const scene = createScene(container, state);
 
 bindKeyboard(container, state, keys);

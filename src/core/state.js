@@ -22,6 +22,7 @@ export function createState() {
     launcherOffsetZ: 0.53,
     dispersionBase: 0.05,
     dispersionPerMeter: 0.02,
+    language: "zh",
   };
 }
 

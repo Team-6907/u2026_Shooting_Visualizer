@@ -105,10 +105,39 @@ body {
   border-left: 1px solid var(--outline);
 }
 
+.controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.language-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.language-switch select {
+  border-radius: 8px;
+  border: 1px solid rgba(27, 31, 36, 0.2);
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: "IBM Plex Mono", monospace;
+  background: #ffffff;
+  color: var(--ink);
+}
+
 .controls-panel h2 {
   font-family: "Fraunces", serif;
   font-size: 24px;
-  margin: 0 0 16px;
+  margin: 0;
 }
 
 .control-group {

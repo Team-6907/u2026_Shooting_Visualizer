@@ -1,4 +1,4 @@
-export function initMetrics() {
+export function initMetrics(i18n) {
   const metrics = {
     range: document.getElementById("metricRange"),
     flywheel: document.getElementById("metricFlywheel"),
@@ -18,7 +18,9 @@ export function initMetrics() {
       : "---";
 
     const isOk = solution.isOnTarget;
-    metrics.onTarget.textContent = isOk ? "是" : "否";
+    const yesText = i18n ? i18n.t("yes") : "是";
+    const noText = i18n ? i18n.t("no") : "否";
+    metrics.onTarget.textContent = isOk ? yesText : noText;
     metrics.onTarget.classList.toggle("ok", isOk);
     metrics.onTarget.classList.toggle("warn", !isOk);
   }
