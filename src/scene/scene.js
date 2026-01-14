@@ -561,6 +561,58 @@ export function createScene(container, state) {
 
   const shots = [];
   let shotTimer = 0;
+  let gaussianSpare = null;
+  const upAxis = new THREE.Vector3(0, 1, 0);
+
+  function randomGaussian() {
+    if (gaussianSpare !== null) {
+      const value = gaussianSpare;
+      gaussianSpare = null;
+      return value;
+    }
+    let u = 0;
+    let v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    const mag = Math.sqrt(-2 * Math.log(u));
+    const z0 = mag * Math.cos(2 * Math.PI * v);
+    const z1 = mag * Math.sin(2 * Math.PI * v);
+    gaussianSpare = z1;
+    return z0;
+  }
+
+  function getDispersionSigmaAngle(range) {
+    const base = Math.max(0, Number(state.dispersionBase) || 0);
+    const perMeter = Math.max(0, Number(state.dispersionPerMeter) || 0);
+    if (base === 0 && perMeter === 0) return 0;
+    const sigmaDistance = base + perMeter * range;
+    if (sigmaDistance <= 0) return 0;
+    const rangeSafe = Math.max(range, 0.05);
+    const sigmaAngle = Math.atan2(sigmaDistance, rangeSafe);
+    return Math.min(sigmaAngle, Math.PI / 4);
+  }
+
+  function applyDispersion(velX, velY, velZ, sigmaAngle) {
+    if (!sigmaAngle) return { x: velX, y: velY, z: velZ };
+    const speed = Math.hypot(velX, velY, velZ);
+    if (speed <= 1e-5) return { x: velX, y: velY, z: velZ };
+
+    const forward = new THREE.Vector3(velX, velY, velZ).normalize();
+    const yaw = randomGaussian() * sigmaAngle;
+    const pitch = randomGaussian() * sigmaAngle;
+
+    forward.applyAxisAngle(upAxis, yaw);
+    const right = new THREE.Vector3().crossVectors(forward, upAxis);
+    if (right.lengthSq() < 1e-6) {
+      right.set(1, 0, 0);
+    } else {
+      right.normalize();
+    }
+    forward.applyAxisAngle(right, pitch);
+    forward.multiplyScalar(speed);
+
+    return { x: forward.x, y: forward.y, z: forward.z };
+  }
 
   function buildFuelShot() {
     if (!fuelTemplate) {
@@ -595,9 +647,16 @@ export function createScene(container, state) {
     const posZ = solution.launcherY;
 
     // 速度映射: ballVx, ballVy 是场地平面速度，vz 是垂直速度
-    const velX = solution.ballVx;
-    const velY = solution.vz; // 垂直速度
-    const velZ = solution.ballVy;
+    let velX = solution.ballVx;
+    let velY = solution.vz; // 垂直速度
+    let velZ = solution.ballVy;
+    const sigmaAngle = getDispersionSigmaAngle(solution.range);
+    if (sigmaAngle > 0) {
+      const dispersed = applyDispersion(velX, velY, velZ, sigmaAngle);
+      velX = dispersed.x;
+      velY = dispersed.y;
+      velZ = dispersed.z;
+    }
 
     shot.position.set(posX, posY, posZ);
     shotsGroup.add(shot);
@@ -620,9 +679,9 @@ export function createScene(container, state) {
       x: solution.launcherX,
       y: solution.launcherY,
       z: solution.launcherZ,
-      vx: solution.ballVx,
-      vy: solution.ballVy,
-      vz: solution.vz,
+      vx: velX,
+      vy: velZ,
+      vz: velY,
       age: 0,
     });
 

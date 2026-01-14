@@ -20,6 +20,8 @@ export function createState() {
     launcherOffsetX: -0.53,
     launcherOffsetY: 0.05,
     launcherOffsetZ: 0.53,
+    dispersionBase: 0.05,
+    dispersionPerMeter: 0.02,
   };
 }
 

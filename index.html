@@ -117,6 +117,24 @@
         </div>
 
         <div class="control-group">
+          <label class="section-title">🎯 散度参数</label>
+
+          <label>散度基线 (m)</label>
+          <div class="control-row" data-key="dispersionBase">
+            <input type="range" min="0" max="0.3" step="0.01" value="0.05" />
+            <input type="number" step="0.01" value="0.05" />
+          </div>
+
+          <label>距离增益 (m/m)</label>
+          <div class="control-row" data-key="dispersionPerMeter">
+            <input type="range" min="0" max="0.1" step="0.005" value="0.02" />
+            <input type="number" step="0.005" value="0.02" />
+          </div>
+
+          <div class="helper">散度 ≈ 基线 + 距离增益 × 距离</div>
+        </div>
+
+        <div class="control-group">
           <label class="section-title section-title--target">🎯 目标射击点 (m)</label>
 
           <label>目标 X</label>
