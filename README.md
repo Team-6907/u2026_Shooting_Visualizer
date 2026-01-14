@@ -13,20 +13,27 @@ FRC 2026 Shoot-on-Move 可视化工具，基于物理模型模拟动态射球补
 
 在线访问：https://team-6907.github.io/u2026_Shooting_Visualizer/
 
-### 本地部署
+### 本地开发（Vite）
 
-由于项目使用了 ES6 模块和相对路径导入，需要通过 HTTP 服务器运行，不能直接打开 `index.html` 文件。
-
-#### 使用 Python HTTP 服务器
-
-1. 在项目根目录打开终端
-2. 运行以下命令启动本地服务器：
+本项目使用 Vite 进行构建与开发。首次运行需要安装依赖。
 
 ```bash
-python3 -m http.server 5173
+npm install
+npm run dev
 ```
 
-3. 在浏览器中访问：`http://localhost:5173`
+浏览器访问：`http://localhost:5173`
+
+#### 构建与预览
+
+```bash
+npm run build
+npm run preview
+```
+
+构建产物位于 `dist/`，用于 GitHub Pages 部署。
+
+> GitHub Pages 部署需要正确设置 `vite.config.js` 的 `base` 为仓库名路径。
 
 ## 控制
 
