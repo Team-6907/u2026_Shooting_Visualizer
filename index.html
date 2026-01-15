@@ -38,12 +38,21 @@
       <aside class="controls-panel">
         <div class="controls-header">
           <h2 data-i18n="controlsTitle">控制</h2>
-          <div class="language-switch">
-            <label for="langSelect" data-i18n="language">语言</label>
-            <select id="langSelect">
-              <option value="zh">中文</option>
-              <option value="en">EN</option>
-            </select>
+          <div class="header-switches">
+            <div class="header-switch">
+              <label for="qualitySelect" data-i18n="renderQuality">画质</label>
+              <select id="qualitySelect">
+                <option value="performance" data-i18n="qualityPerformance">性能</option>
+                <option value="fidelity" data-i18n="qualityFidelity">拟真</option>
+              </select>
+            </div>
+            <div class="header-switch">
+              <label for="langSelect" data-i18n="language">语言</label>
+              <select id="langSelect">
+                <option value="zh">中文</option>
+                <option value="en">EN</option>
+              </select>
+            </div>
           </div>
         </div>
 

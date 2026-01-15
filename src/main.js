@@ -8,6 +8,7 @@ import { createScene } from "./scene/scene.js";
 import { initControls } from "./ui/controls.js";
 import { initI18n } from "./ui/i18n.js";
 import { initMetrics } from "./ui/metrics.js";
+import { initRenderQuality } from "./ui/render-quality.js";
 import { initRapier } from "./physics/rapier.js";
 
 // 初始化 Rapier WASM（异步）
@@ -30,6 +31,7 @@ const i18n = initI18n(state);
 const controls = initControls(state);
 const metrics = initMetrics(i18n);
 const scene = createScene(container, state);
+initRenderQuality(state, scene);
 
 bindKeyboard(container, state, keys);
 

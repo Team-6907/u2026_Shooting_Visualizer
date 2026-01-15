@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import {
   BALL_DIAMETER,
@@ -65,13 +66,65 @@ export function createScene(container, state) {
   camera.lookAt(DEFAULT_TARGET.x, 1.5, DEFAULT_TARGET.y);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.shadowMap.enabled = true;
-  renderer.physicallyCorrectLights = false;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
   container.appendChild(renderer.domElement);
+
+  let currentQuality = "performance";
+  const qualityMeshes = new Set();
+  const performanceBackground = new THREE.Color(0x16213e);
+  const fidelityBackground = new THREE.Color(0xffffff);
+  let ambientLight = null;
+  let hemisphereLight = null;
+  let dirLight = null;
+  let fillLight = null;
+  let redLight = null;
+  let blueLight = null;
+  let environmentTexture = null;
+  const materialEnvIntensity = new WeakMap();
+  const materialRoughness = new WeakMap();
+  const materialMetalness = new WeakMap();
+  const FIDELITY_ENV_INTENSITY_SCALE = 0.16;
+  const FIDELITY_ROUGHNESS_MIN = 0.45;
+  const FIDELITY_METALNESS_MAX = 0.32;
+
+  function setRenderQuality(mode) {
+    currentQuality = mode === "fidelity" ? "fidelity" : "performance";
+    const isFidelity = currentQuality === "fidelity";
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = isFidelity ? THREE.PCFShadowMap : THREE.PCFShadowMap;
+    renderer.physicallyCorrectLights = false;
+    renderer.toneMapping = isFidelity ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    renderer.toneMappingExposure = isFidelity ? 1.2 : 1.0;
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    applyQualityToMeshes();
+    if (environmentTexture) {
+      scene.environment = isFidelity ? environmentTexture : null;
+    }
+    scene.background = isFidelity ? fidelityBackground : performanceBackground;
+    if (ambientLight) {
+      ambientLight.intensity = isFidelity ? 0.18 : 0.5;
+    }
+    if (hemisphereLight) {
+      hemisphereLight.intensity = isFidelity ? 0.32 : 0.5;
+      hemisphereLight.color.setHex(0xffffff);
+      hemisphereLight.groundColor.setHex(isFidelity ? 0xd0c9c5 : 0x2c3e50);
+    }
+    if (dirLight) {
+      dirLight.intensity = isFidelity ? 4.2 : 1.0;
+      dirLight.color.setHex(isFidelity ? 0xfff1e6 : 0xffffff);
+      dirLight.shadow.radius = isFidelity ? 1 : 1;
+    }
+    if (fillLight) {
+      fillLight.intensity = isFidelity ? 0.55 : 0.0;
+    }
+    if (redLight) {
+      redLight.intensity = isFidelity ? 2.6 : 0.0;
+    }
+    if (blueLight) {
+      blueLight.intensity = isFidelity ? 2.9 : 0.0;
+    }
+  }
 
   const orbitControls = new OrbitControls(camera, renderer.domElement);
   orbitControls.target.set(DEFAULT_TARGET.x, 1, DEFAULT_TARGET.y);
@@ -82,12 +135,51 @@ export function createScene(container, state) {
   let lastTargetX = state.targetX;
   let lastTargetY = state.targetY;
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x2c3e50, 0.5));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-  dirLight.position.set(10, 20, 10);
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
+  hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x2c3e50, 0.5);
+  scene.add(hemisphereLight);
+  dirLight = new THREE.DirectionalLight(0xffffff, 1);
+  dirLight.position.set(12, 18, 6);
   dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(2048, 2048);
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 50;
+  dirLight.shadow.camera.left = -14;
+  dirLight.shadow.camera.right = 14;
+  dirLight.shadow.camera.top = 10;
+  dirLight.shadow.camera.bottom = -10;
+  dirLight.shadow.bias = -0.0003;
+  dirLight.shadow.normalBias = 0.02;
+  dirLight.target.position.set(FIELD_LENGTH * 0.5, 0, FIELD_WIDTH * 0.5);
+  scene.add(dirLight.target);
   scene.add(dirLight);
+
+  fillLight = new THREE.DirectionalLight(0xd9e6ff, 0.0);
+  fillLight.position.set(-10, 12, -6);
+  fillLight.castShadow = false;
+  scene.add(fillLight);
+
+  redLight = new THREE.DirectionalLight(0xff5c4d, 0.0);
+  redLight.position.set(12, 14, -2);
+  redLight.target.position.set(FIELD_LENGTH * 0.6, 0, FIELD_WIDTH * 0.6);
+  redLight.castShadow = false;
+  scene.add(redLight.target);
+  scene.add(redLight);
+
+  blueLight = new THREE.DirectionalLight(0x4d6bff, 0.0);
+  blueLight.position.set(-10, 14, 4);
+  blueLight.target.position.set(FIELD_LENGTH * 0.4, 0, FIELD_WIDTH * 0.4);
+  blueLight.castShadow = false;
+  scene.add(blueLight.target);
+  scene.add(blueLight);
+
+
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  environmentTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmremGenerator.dispose();
+
+  setRenderQuality(state.renderQuality || "performance");
 
   const fieldGroup = new THREE.Group();
   scene.add(fieldGroup);
@@ -244,12 +336,108 @@ export function createScene(container, state) {
     return lambert;
   }
 
-  function simplifyMeshMaterials(mesh) {
-    if (Array.isArray(mesh.material)) {
-      mesh.material = mesh.material.map((mat) => simplifyMaterial(mat));
-    } else if (mesh.material) {
-      mesh.material = simplifyMaterial(mesh.material);
+  function applyEnvIntensity(material, mode) {
+    if (!material || typeof material.envMapIntensity !== "number") return;
+    let base = materialEnvIntensity.get(material);
+    if (base === undefined) {
+      base = material.envMapIntensity;
+      materialEnvIntensity.set(material, base);
     }
+    material.envMapIntensity = mode === "fidelity" ? base * FIDELITY_ENV_INTENSITY_SCALE : base;
+  }
+
+  function applyEnvIntensityToMaterial(material, mode) {
+    if (Array.isArray(material)) {
+      material.forEach((mat) => applyEnvIntensity(mat, mode));
+    } else {
+      applyEnvIntensity(material, mode);
+    }
+  }
+
+  function applySurfaceTuning(material, mode) {
+    if (!material) return;
+    if (typeof material.roughness === "number") {
+      let base = materialRoughness.get(material);
+      if (base === undefined) {
+        base = material.roughness;
+        materialRoughness.set(material, base);
+      }
+      material.roughness = mode === "fidelity" ? Math.max(base, FIDELITY_ROUGHNESS_MIN) : base;
+    }
+    if (typeof material.metalness === "number") {
+      let base = materialMetalness.get(material);
+      if (base === undefined) {
+        base = material.metalness;
+        materialMetalness.set(material, base);
+      }
+      material.metalness = mode === "fidelity" ? Math.min(base, FIDELITY_METALNESS_MAX) : base;
+    }
+  }
+
+  function applySurfaceTuningToMaterial(material, mode) {
+    if (Array.isArray(material)) {
+      material.forEach((mat) => applySurfaceTuning(mat, mode));
+    } else {
+      applySurfaceTuning(material, mode);
+    }
+  }
+
+  function setMeshShadowPolicy(mesh, policy) {
+    if (!mesh?.isMesh) return;
+    mesh.userData.shadowPolicy = policy;
+    applyShadowPolicy(mesh, currentQuality);
+  }
+
+  function applyShadowPolicy(mesh, mode) {
+    const policy = mesh?.userData?.shadowPolicy;
+    if (!policy) return;
+    mesh.receiveShadow = policy.receive;
+    mesh.castShadow = mode === "fidelity" ? policy.castFidelity : policy.castPerformance;
+  }
+
+  function cacheMeshMaterials(mesh) {
+    if (mesh.userData.originalMaterial) return;
+    mesh.userData.originalMaterial = mesh.material;
+    if (Array.isArray(mesh.material)) {
+      mesh.userData.simplifiedMaterial = mesh.material.map((mat) => simplifyMaterial(mat));
+    } else if (mesh.material) {
+      mesh.userData.simplifiedMaterial = simplifyMaterial(mesh.material);
+    } else {
+      mesh.userData.simplifiedMaterial = mesh.material;
+    }
+  }
+
+  function applyMaterialQuality(mesh, mode) {
+    cacheMeshMaterials(mesh);
+    const useFidelity = mode === "fidelity";
+    const nextMaterial = useFidelity
+      ? mesh.userData.originalMaterial
+      : mesh.userData.simplifiedMaterial;
+    if (mesh.material !== nextMaterial) {
+      mesh.material = nextMaterial;
+    }
+    applyShadowPolicy(mesh, mode);
+    if (useFidelity) {
+      applyEnvIntensityToMaterial(mesh.material, "fidelity");
+      applySurfaceTuningToMaterial(mesh.material, "fidelity");
+    } else {
+      applyEnvIntensityToMaterial(mesh.userData.originalMaterial, "performance");
+      applySurfaceTuningToMaterial(mesh.userData.originalMaterial, "performance");
+    }
+  }
+
+  function registerQualityMesh(mesh, options = {}) {
+    if (!mesh?.isMesh) return;
+    cacheMeshMaterials(mesh);
+    if (options.shadowPolicy) {
+      setMeshShadowPolicy(mesh, options.shadowPolicy);
+    }
+    qualityMeshes.add(mesh);
+    applyMaterialQuality(mesh, currentQuality);
+  }
+
+  function applyQualityToMeshes() {
+    qualityMeshes.forEach((mesh) => applyMaterialQuality(mesh, currentQuality));
   }
 
   gltfLoader.load(
@@ -302,9 +490,9 @@ export function createScene(container, state) {
 
       model.traverse((child) => {
         if (child.isMesh) {
-          simplifyMeshMaterials(child);
-          child.castShadow = false;
-          child.receiveShadow = true;
+          registerQualityMesh(child, {
+            shadowPolicy: { castPerformance: false, castFidelity: true, receive: true },
+          });
         }
       });
 
@@ -375,9 +563,9 @@ export function createScene(container, state) {
       model.position.sub(center);
       model.traverse((child) => {
         if (child.isMesh) {
-          simplifyMeshMaterials(child);
-          child.castShadow = true;
-          child.receiveShadow = true;
+          registerQualityMesh(child, {
+            shadowPolicy: { castPerformance: true, castFidelity: true, receive: true },
+          });
         }
       });
       fuelTemplate = model;
@@ -420,9 +608,9 @@ export function createScene(container, state) {
 
         model.traverse((child) => {
           if (child.isMesh) {
-            simplifyMeshMaterials(child);
-            child.castShadow = true;
-            child.receiveShadow = true;
+            registerQualityMesh(child, {
+              shadowPolicy: { castPerformance: true, castFidelity: true, receive: true },
+            });
           }
         });
 
@@ -946,7 +1134,7 @@ export function createScene(container, state) {
   function resize() {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    setRenderQuality(currentQuality);
   }
 
   return {
@@ -954,5 +1142,6 @@ export function createScene(container, state) {
     tick,
     render,
     resize,
+    setRenderQuality,
   };
 }

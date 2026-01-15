@@ -114,7 +114,15 @@ body {
   margin-bottom: 16px;
 }
 
-.language-switch {
+.header-switches {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.header-switch {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -124,7 +132,7 @@ body {
   color: var(--muted);
 }
 
-.language-switch select {
+.header-switch select {
   border-radius: 8px;
   border: 1px solid rgba(27, 31, 36, 0.2);
   padding: 4px 6px;
