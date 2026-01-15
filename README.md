@@ -10,10 +10,18 @@ GOATSim shooting simulator for the FRC 2026 Season, REBUILT, with physics-based 
 
 <table>
   <tr>
-    <td><img src="assets/shoot_on_the_move.gif" width="430" alt="Shoot on the move" /></td>
-    <td><img src="assets/interaction.gif" width="360" alt="Interaction demo" /></td>
+    <td><img src="assets/shoot_on_the_move.gif" width="400" alt="Shoot on the move" /></td>
+    <td><img src="assets/interaction.gif" width="400" alt="Interaction demo" /></td>
   </tr>
 </table>
+
+### Recent updates
+
+- Performance/Fidelity render quality toggle with cinematic lighting
+- EN/CN UI language switch with persistent preference
+- Distance-based dispersion controls to visualize shot spread
+- Physics-driven ball collisions with field elements
+- Updated 2026 REBUILT field + kitbot assets and tuning panel
 
 ### Features
 

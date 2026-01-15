@@ -1,6 +1,6 @@
 # GOATSim Shooting 模拟器 for REBUILT
 
-[![Chief Delphi Thread](https://img.shields.io/badge/Chief%20Delphi-Thread-0b7285?logo=discourse&logoColor=white)](https://www.chiefdelphi.com/t/goatsim-interactive-shoot-on-move-solver-and-fuel-collision-demo/)
+[![Chief Delphi Thread](https://img.shields.io/badge/Chief%20Delphi-Thread-0b7285?logo=discourse&logoColor=white)](https://www.chiefdelphi.com/t/goatsim-interactive-shoot-on-move-solver-and-fuel-collision-demo/511490)
 
 面向 FRC 2026赛季 REBUILT 的射球可视化工具，用物理模型模拟动态射球补偿。
 
@@ -10,10 +10,18 @@
 
 <table>
   <tr>
-    <td><img src="assets/shoot_on_the_move.gif" width="430" alt="Shoot on the move" /></td>
-    <td><img src="assets/interaction.gif" width="360" alt="Interaction demo" /></td>
+    <td><img src="assets/shoot_on_the_move.gif" width="400" alt="Shoot on the move" /></td>
+    <td><img src="assets/interaction.gif" width="400" alt="Interaction demo" /></td>
   </tr>
 </table>
+
+### 近期更新
+
+- 画质切换（性能/拟真），加入电影感灯光效果
+- 中英文界面切换，语言偏好可保存
+- 距离相关散度控制，用于可视化弹群扩散
+- 物理碰撞：球与场地元素产生真实交互
+- 更新 2026 REBUILT 场地与 KitBot 模型，并补充调参面板
 
 ### 功能
 
