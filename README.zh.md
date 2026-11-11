@@ -66,3 +66,9 @@ npm run preview
 ### 致谢
 
 - 3D 模型来自 Team 6328 的 AdvantageScope: https://docs.advantagescope.org/
+
+### 许可
+
+GOATSim 的源代码以 MIT 许可证发布，详见 [LICENSE](LICENSE)。
+
+MIT 许可证不涵盖 `public/assets/` 下的第三方素材：随附的 3D 场地与机器人模型来自 Team 6328 的 AdvantageScope（见“致谢”），仍适用其原始许可条款；REBUILT 赛季标志归 FIRST 所有。

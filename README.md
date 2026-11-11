@@ -66,3 +66,9 @@ npm run preview
 ### Acknowledgements
 
 - 3D models from Team 6328's AdvantageScope: https://docs.advantagescope.org/
+
+### License
+
+The GOATSim source code is released under the MIT License. See [LICENSE](LICENSE).
+
+The MIT license does not cover the third-party assets under `public/assets/`: the bundled 3D field and robot models come from Team 6328's AdvantageScope (see Acknowledgements) and remain under their original terms, and the REBUILT game logo belongs to FIRST.
